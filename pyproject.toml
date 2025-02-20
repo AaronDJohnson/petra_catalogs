@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "petra"
+name = "petra-catalogs"
 version = "0.1.0"
 description = ""
 authors = ["Aaron <Aaron9034@Hotmail.com>"]
