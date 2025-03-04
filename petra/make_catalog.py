@@ -24,6 +24,7 @@ def relabel_mv_normal(posterior_chain: PosteriorChain,
 def make_catalog_mv_normal(posterior_chain: PosteriorChain,
                            max_num_sources: int,
                            num_iterations: int = 200,
+                           init_num_iterations: int = 200,
                            initialization_param_index: int = None,
                            shuffle_seed: int = None):
     # shuffle the entries
@@ -36,12 +37,12 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
     # initialize here:
     if initialization_param_index is not None:
         print("Initializing with univariate normal distribution.")
-        # initial_posterior_chain = relabel_uni_normal_one_parameter(posterior_chain,
-        #                                                            max_num_sources=max_num_sources,
-        #                                                            num_iterations=init_num_iterations,
-        #                                                            init_parameter_index=initialization_param_index)
-        initial_posterior_chain = relabel_by_histogram(posterior_chain,
-                                                       init_parameter_index=initialization_param_index)
+        initial_posterior_chain = relabel_uni_normal_one_parameter(posterior_chain,
+                                                                   max_num_sources=max_num_sources,
+                                                                   num_iterations=init_num_iterations,
+                                                                   init_parameter_index=initialization_param_index)
+        # initial_posterior_chain = relabel_by_histogram(posterior_chain,
+        #                                                init_parameter_index=initialization_param_index)
     else:
         initial_posterior_chain = posterior_chain
 
