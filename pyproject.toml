@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "From LISA global fit to catalogs"
 authors = ["Aaron D. Johnson", "Javier Roulete", "Katerina Chatziioannou", "Michele Vallisneri", "Kyle Gersbach", "Chris Trejo"]
 readme = "README.md"
+packages = [{include = "petra"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
