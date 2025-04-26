@@ -23,7 +23,7 @@ def mv_normal_aux_distribution(sample: np.ndarray,
     source_indices = np.atleast_1d(source_index)
     means = np.array(means)[source_indices]         # shape: (n, d)
     cov_matrices = np.array(cov_matrices)[source_indices]  # shape: (n, d, d)
-    
+
     num_sources, d = sample.shape
     # Broadcast sample to match the number of distributions.
     diff = sample[np.newaxis, :, :] - means[:, np.newaxis, :]  # shape: (n, num_sources, d)
@@ -33,7 +33,7 @@ def mv_normal_aux_distribution(sample: np.ndarray,
     # Compute the Mahalanobis term over distributions and sources.
     mahal = np.einsum('nsi, nij, nsj -> ns', diff, inv_cov, diff)  # shape: (n, num_sources)
     logpdf = -0.5 * (d * np.log(2 * np.pi) + logdet[:, None] + mahal)  # shape: (n, num_sources)
-    
+
     # Return result: squeeze out axis if only one distribution was requested.
     if logpdf.shape[0] == 1:
         return logpdf[0]
