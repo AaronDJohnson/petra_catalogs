@@ -5,6 +5,46 @@ from petra.utils import sort_by_number
 from petra.posterior_chain import PosteriorChain
 
 
+def load_samples(path,
+                 num_params_per_source,
+                 fill_value=np.nan,
+                 burn=0,
+                 thin=1,
+                 remove_low_numbers=False):
+    """
+    Unified loader. If `path` is a directory → UCBMCMC.
+    If it's a file, examine n_cols to pick product-space (n_cols - 5)
+    vs fixed-num-sources (n_cols - 4).
+    """
+    if os.path.isdir(path):
+        return load_samples_ucbmcmc(path,
+                                    fill_value=fill_value,
+                                    burn=burn,
+                                    thin=thin,
+                                    remove_low_numbers=remove_low_numbers)
+
+    # file case
+    chain = np.loadtxt(path)
+    n_cols = chain.shape[1]
+
+    # product‐space files have 5 metadata cols at end
+    if n_cols > 5 and (n_cols - 5) % num_params_per_source == 0:
+        return load_samples_product_space(path,
+                                          num_params_per_source,
+                                          fill_value=fill_value)
+
+    # fixed‐num‐sources files have 4 metadata cols at end
+    if n_cols > 4 and (n_cols - 4) % num_params_per_source == 0:
+        return load_samples_fixed_num_sources(path,
+                                              num_params_per_source,
+                                              burn=burn,
+                                              thin=thin)
+
+    raise ValueError(
+        f"Cannot infer loader for {path!r} with shape (n_cols={n_cols})"
+    )
+
+
 def load_samples_product_space(filepath, num_params_per_source, fill_value=np.nan):
     """
     Load chains from a file and reshape them into a 3D array
@@ -54,10 +94,10 @@ def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove
     of dimensions in the model) are loaded.
 
     Assumes the chain is organized as:
-      (param1_source1, param2_source1, ..., 
-       param1_source2, param2_source2, ..., 
+      (param1_source1, param2_source1, ..., paramN_source2,
+       param1_source2, param2_source2, ..., paramN_source2,
        ...,
-       paramN_source1, paramN_source2, ...)
+       param1_sourceM, param2_sourceM, ..., paramN_sourceM)
     """
 
     # Find and sort all matching filepaths.
@@ -111,3 +151,5 @@ def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove
         trans_dimensional=True,
         num_params_per_source=8,
     )
+
+
