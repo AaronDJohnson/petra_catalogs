@@ -2,7 +2,7 @@ from petra.posterior_chain import PosteriorChain
 from petra.relabel import create_relabel_samples
 from petra.aux_distributions import mv_normal_aux_distribution
 from petra.parametric_fits import mv_normal_fit
-from petra.initialization import relabel_uni_normal_one_parameter, relabel_by_histogram
+from petra.initialization import relabel_uni_normal_one_parameter
 
 
 def relabel_mv_normal(posterior_chain: PosteriorChain,
@@ -28,10 +28,14 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
                            initialization_param_index: int = None,
                            shuffle_seed: int = None):
     # shuffle the entries
-    posterior_chain.randomize_entries(shuffle_seed)
+    posterior_chain = posterior_chain.randomize_entries(shuffle_seed)  # works with a copy of the chain
+
+    if posterior_chain.num_sources > max_num_sources:
+        raise ValueError("max_num_sources must be greater than the number of entries in the chain.")
 
     # make sure that posterior_chain has the right shape
-    if posterior_chain.num_sources > max_num_sources:
+    if posterior_chain.num_sources < max_num_sources:
+        print("Expanding posterior chain to max_num_sources.")
         posterior_chain.expand_chain(max_num_sources)
 
     # initialize here:
@@ -41,8 +45,7 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
                                                                    max_num_sources=max_num_sources,
                                                                    num_iterations=init_num_iterations,
                                                                    init_parameter_index=initialization_param_index)
-        # initial_posterior_chain = relabel_by_histogram(posterior_chain,
-        #                                                init_parameter_index=initialization_param_index)
+
     else:
         initial_posterior_chain = posterior_chain
 
