@@ -8,7 +8,7 @@ from petra.relabel import create_relabel_samples
 def relabel_by_sorting(posterior_chain: PosteriorChain, init_parameter_index: int = 0):
     """
     Relabel sources by simply sorting each row by the chosen parameter.
-    
+
     NaNs are replaced by infinity so that they come last, then after sorting
     we revert infinity back to NaN.
     """
@@ -22,7 +22,7 @@ def relabel_by_sorting(posterior_chain: PosteriorChain, init_parameter_index: in
 
     # For each row, get the permutation that sorts the parameter values.
     ordering = np.argsort(param, axis=1)
-    
+
     # Reorder the entire chain.
     reordered_chain = np.take_along_axis(chain, ordering[:, :, np.newaxis], axis=1)
 
@@ -45,7 +45,7 @@ def relabel_by_histogram(posterior_chain: PosteriorChain, init_parameter_index: 
     """
     Assign labels to sources based on samples for one parameter,
     ensuring that each original column (source) is used exactly once per row.
-    
+
     The algorithm:
       1. Extract the parameter values (for ordering) and replace NaNs with ∞ so they’re
          chosen only after all finite values.
@@ -57,14 +57,14 @@ def relabel_by_histogram(posterior_chain: PosteriorChain, init_parameter_index: 
          d. Mark that chosen value as “used” by setting it to NaN.
       3. Reorder the full chain according to the computed ordering.
       4. Convert any ∞ values in the sorted parameter back to NaN.
-    
+
     Parameters
     ----------
     posterior_chain : PosteriorChain
         Contains a 3D array of samples with shape (n_samples, n_sources, n_params).
     init_parameter_index : int, optional
         The parameter index used for sorting (default 0).
-    
+
     Returns
     -------
     PosteriorChain
@@ -136,6 +136,7 @@ def relabel_uni_normal_one_parameter(posterior_chain: PosteriorChain,
                                      num_iterations: int = 20,
                                      init_parameter_index: int = 0,
                                      eps=1e-2):
+
     # create single parameter function to relabel samples
     relabel_samples = create_relabel_samples(uni_normal_fit_single_parameter,
                                              uni_normal_aux_distribution_single_parameter,
