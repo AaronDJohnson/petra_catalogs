@@ -64,7 +64,11 @@ class PosteriorChain:
         Randomize the entries (second dimension) of the chain without repetition.
         """
         # Shuffle along axis=1 (the second dimension) for each index in the first dimension
-        if seed is not None:
-            np.random.seed(seed)
+        rng = np.random.default_rng(seed=seed)
+
+        # Make a copy of the chain to avoid modifying the original
+        chain = self.chain.copy()
+
         for i in range(self.chain.shape[0]):
-            np.random.shuffle(self.chain[i])
+            rng.shuffle(chain[i])
+        return PosteriorChain(chain, self.num_sources, self.num_params_per_source, self.trans_dimensional, self.prob_in_model, self.cost_dict)
