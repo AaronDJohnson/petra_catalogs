@@ -46,12 +46,3 @@ def test_uni_gaussian_cost_matrix(posterior_chain_nans_fixture):
     assert np.isclose(cost_matrix[0, 1], -0.05769722)
     assert np.isclose(cost_matrix[1, 0], 0.29758345)
     assert np.isclose(cost_matrix[1, 1], -0.06277712)
-
-
-
-
-
-
-
-
-

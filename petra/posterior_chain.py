@@ -116,7 +116,7 @@ class PosteriorChain:
         expanded_chain = np.zeros((self.chain.shape[0], max_num_sources, self.num_params_per_source)) + np.nan
         expanded_chain[:, :self.num_sources, :] = self.chain
         return PosteriorChain(expanded_chain, max_num_sources, self.num_params_per_source, True, self.prob_in_model, self.cost_dict)
-    
+
     def randomize_entries(self, seed=None):
         """
         Shuffle the entries (second dimension) of each sample without repetition.

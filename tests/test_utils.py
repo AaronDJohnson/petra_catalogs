@@ -3,6 +3,7 @@ import numpy as np
 from petra.utils import find_prob_in_model
 from petra.posterior_chain import PosteriorChain
 
+
 @pytest.fixture
 def posterior_chain_fixture():
     np.random.seed(0)
@@ -15,12 +16,14 @@ def posterior_chain_fixture():
     chain[1::2, 1] = np.nan
     return PosteriorChain(chain, 2, 1)
 
+
 def test_find_pastro(posterior_chain_fixture):
     chain = posterior_chain_fixture.get_chain()
     prob_in_model = find_prob_in_model(chain, max_num_sources=2)
     assert prob_in_model.shape[0] == 2
     assert np.isclose(prob_in_model[0], 0.5, rtol=1e-8)
     assert np.isclose(prob_in_model[1], 0.5, rtol=1e-8)
+
 
 def test_find_pastro_max_sources(posterior_chain_fixture):
     chain = posterior_chain_fixture.get_chain()

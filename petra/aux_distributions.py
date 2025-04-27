@@ -112,14 +112,12 @@ def uni_normal_aux_distribution_single_parameter(sample: np.ndarray,
     source_indices = np.atleast_1d(source_index)
     means = np.array(means)[source_indices]  # shape: (n,)
     stds = np.array(stds)[source_indices]      # shape: (n,)
-    
+
     # Compute logpdf in a vectorized way. Broadcasting: (n,1) vs (num_sources,)
     logpdf = (
-        -0.5 * np.log(2 * np.pi)
-        - np.log(stds)[:, None]
-        - 0.5 * (((values - means[:, None]) / stds[:, None]) ** 2)
+        -0.5 * np.log(2 * np.pi) - np.log(stds)[:, None] - 0.5 * (((values - means[:, None]) / stds[:, None]) ** 2)
     )  # shape: (n, num_sources)
-    
+
     if logpdf.shape[0] == 1:
         return logpdf[0]
     return logpdf

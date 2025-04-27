@@ -137,5 +137,5 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
     relabeled_chain = relabel_mv_normal(initial_posterior_chain,
                                         max_num_sources=max_num_sources,
                                         num_iterations=num_iterations)
-    
+
     return relabeled_chain

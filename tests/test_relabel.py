@@ -32,12 +32,12 @@ def test_mv_gaussian_relabel_no_nans(posterior_chain_no_nans_fixture):
     relabeled_chain, total_cost = relabel_samples(chain, mv_gaussian_params, prob_in_model, max_num_sources, compute_mv_gaussian_cost_matrix)
 
     assert len(relabeled_chain) == len(chain)
-    first_three_expected = np.array([[[0.5488135 ],
-         [0.74826798]],
-        [[0.71518937],
-         [0.18020271]],
-        [[0.60276338],
-         [0.38902314]]])
+    first_three_expected = np.array([[[0.5488135],
+                                     [0.74826798]],
+                                     [[0.71518937],
+                                     [0.18020271]],
+                                     [[0.60276338],
+                                     [0.38902314]]])
     for i in range(3):
         assert np.allclose(relabeled_chain[i], first_three_expected[i])
 

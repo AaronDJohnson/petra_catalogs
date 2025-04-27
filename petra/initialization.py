@@ -1,4 +1,3 @@
-import numpy as np
 from petra.posterior_chain import PosteriorChain
 from petra.parametric_fits import uni_normal_fit_single_parameter
 from petra.aux_distributions import uni_normal_aux_distribution_single_parameter
@@ -6,10 +5,10 @@ from petra.relabel import create_relabel_samples
 
 
 def relabel_univariate_normal(posterior_chain: PosteriorChain,
-                                     max_num_sources: int = None,
-                                     num_iterations: int = 20,
-                                     init_parameter_index: int = 0,
-                                     eps=1e-2):
+                              max_num_sources: int = None,
+                              num_iterations: int = 20,
+                              init_parameter_index: int = 0,
+                              eps=1e-2):
     """
     Iteratively relabels a posterior chain using univariate normal fits.
 

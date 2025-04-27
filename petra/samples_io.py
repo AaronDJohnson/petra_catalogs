@@ -184,7 +184,7 @@ def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove
     filepaths = sort_by_number(
         glob.glob(os.path.join(chain_folder, "dimension_chain.dat.*"))
     )
-    
+
     # Build a list of valid files that have more samples than the model's 8 dimensions.
     valid_files = []
     for filepath in filepaths:
@@ -192,30 +192,30 @@ def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove
         nsources = int(filepath.split(".")[-1])
         if nsources == 0:
             continue  # Skip files with no sources
-        
+
         # Count the total number of lines in the file.
         with open(filepath, "r") as f:
             total_lines = sum(1 for line in f)
         # Calculate the number of samples by dividing by the number of sources.
         # (Assumes that the file's total line count is an integer multiple of nsources.)
         nsamples = total_lines // nsources
-        
+
         # Only accept files with more than 8 samples.
         if not remove_low_numbers:
             valid_files.append((filepath, nsamples, nsources))
         elif remove_low_numbers and nsamples > 8:
             valid_files.append((filepath, nsamples, nsources))
-    
+
     if not valid_files:
         raise ValueError("No files with more than 8 samples found.")
-    
+
     # Compute the total number of samples and maximum number of sources among valid files.
     total_samples = sum(nsamples for (_, nsamples, _) in valid_files)
     max_sources = max(nsources for (_, _, nsources) in valid_files)
-    
+
     # Initialize the array to hold the samples.
     samples = np.full((total_samples, max_sources, 8), fill_value)
-    
+
     current_total = 0
     # Loop over valid files and load their data.
     for filepath, nsamples, nsources in valid_files:
@@ -224,12 +224,10 @@ def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove
         # Reshape and place the data into the samples array.
         samples[current_total: current_total + nsamples, :nsources, :] = chain.reshape((nsamples, nsources, 8))
         current_total += nsamples
-    
+
     return PosteriorChain(
         samples[burn::thin],
         max_sources,
         trans_dimensional=True,
         num_params_per_source=8,
     )
-
-

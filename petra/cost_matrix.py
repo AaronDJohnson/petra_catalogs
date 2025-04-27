@@ -59,7 +59,7 @@ def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int
         -------
         cost_matrix : ndarray, shape (num_distributions, n_sources)
             Cost where entry (i, j) = log(prob_in_model[i]) + logpdf_i(sample[j]).
-        
+
         Examples
         --------
         >>> from petra.aux_distributions import mv_normal_aux_distribution
