@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "petra-catalogs"
-version = "0.1.0"
+version = "1.0.0"
 description = "From LISA global fit to catalogs"
 authors = ["Aaron D. Johnson", "Javier Roulete", "Katerina Chatziioannou", "Michele Vallisneri", "Kyle Gersbach", "Chris Trejo"]
 readme = "README.md"
@@ -12,6 +12,13 @@ numpy = "^2.2.3"
 scipy = "^1.15.2"
 pandas = "^2.2.3"
 
+[toll.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+sphinx = "^8.2.3"
+flake8 = "^7.2.0"
 
 [build-system]
 requires = ["poetry-core"]
