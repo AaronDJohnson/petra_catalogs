@@ -6,17 +6,41 @@ def mv_normal_aux_distribution(sample: np.ndarray,
                                aux_parameters: Tuple[List[np.ndarray]],
                                source_index) -> np.ndarray:
     """
-    Vectorized: Compute the logpdf of a multivariate normal distribution evaluated at each source in sample.
-    Accepts source_index as an int or array-like.
+    Compute the log‑pdf of multivariate normal distributions for each source.
 
-    Parameters:
-        sample: numpy array of shape (num_sources, num_params_per_source)
-        aux_parameters: Tuple of lists (means, cov_matrices) where each is of length num_distributions.
-        source_index: int or array-like indices specifying which distributions to evaluate.
+    Parameters
+    ----------
+    sample : ndarray, shape (num_sources, num_params_per_source)
+        Array of parameter values for each source.
+    aux_parameters : tuple of lists
+        Tuple ``(means, cov_matrices)`` where
+        - means : list of ndarray, each of shape (num_params_per_source,)
+        - cov_matrices : list of ndarray, each of shape (num_params_per_source, num_params_per_source)
+    source_index : int or array-like
+        Index or indices of which fitted distributions to evaluate.
 
-    Returns:
-        If source_index is a scalar, returns an array of shape (num_sources,).
-        Otherwise, returns an array of shape (len(source_index), num_sources).
+    Returns
+    -------
+    logpdf : ndarray
+        If `source_index` is a scalar, returns shape `(num_sources,)`.
+        Otherwise returns shape `(len(source_index), num_sources)`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from petra.aux_distributions import mv_normal_aux_distribution
+    >>> # 5 samples, 3 parameters per source, 2 fitted distributions
+    >>> sample = np.random.randn(5, 3)
+    >>> means = [np.zeros(3), np.ones(3)]
+    >>> covs = [np.eye(3), 2*np.eye(3)]
+    >>> # evaluate both distributions
+    >>> logpdf = mv_normal_aux_distribution(sample, (means, covs), [0, 1])
+    >>> logpdf.shape
+    (2, 5)
+    >>> # single distribution
+    >>> logpdf0 = mv_normal_aux_distribution(sample, (means, covs), 0)
+    >>> logpdf0.shape
+    (5,)
     """
     means, cov_matrices = aux_parameters
     # Ensure source_index is array-like.
@@ -45,18 +69,43 @@ def uni_normal_aux_distribution_single_parameter(sample: np.ndarray,
                                                  source_index,
                                                  single_parameter: int) -> np.ndarray:
     """
-    Vectorized: Compute the logpdf of a univariate normal distribution on a single parameter for each source.
-    Accepts source_index as an int or array-like.
-    
-    Parameters:
-        sample: numpy array of shape (num_sources, num_params_per_source)
-        aux_parameters: Tuple of lists (means, stds) for the univariate case.
-        source_index: int or array-like indices specifying which distributions to evaluate.
-        single_parameter: the parameter index to process.
-    
-    Returns:
-        If source_index is a scalar, returns an array of shape (num_sources,).
-        Otherwise, returns an array of shape (len(source_index), num_sources).
+    Compute the log-pdf of univariate normal distributions on one parameter.
+
+    Parameters
+    ----------
+    sample : ndarray, shape (num_sources, num_params_per_source)
+        Array of parameter values for each source.
+    aux_parameters : tuple of lists
+        Tuple ``(means, stds)`` where each is a list of length n_distributions.
+    source_index : int or array-like
+        Index or indices of which fitted distributions to evaluate.
+    single_parameter : int
+        Index of the parameter dimension to evaluate.
+
+    Returns
+    -------
+    logpdf : ndarray
+        If `source_index` is a scalar, returns shape `(num_sources,)`.
+        Otherwise returns shape `(len(source_index), num_sources)`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from petra.aux_distributions import uni_normal_aux_distribution_single_parameter
+    >>> # 4 samples, 5 parameters per source, 3 fitted normals
+    >>> sample = np.random.randn(4, 5)
+    >>> means = [0.0, 1.0, -1.0]
+    >>> stds = [1.0, 0.5, 2.0]
+    >>> # evaluate distributions 0 and 2 on parameter index 3
+    >>> logpdf = uni_normal_aux_distribution_single_parameter(
+    ...     sample, (means, stds), [0, 2], single_parameter=3)
+    >>> logpdf.shape
+    (2, 4)
+    >>> # single distribution
+    >>> logpdf1 = uni_normal_aux_distribution_single_parameter(
+    ...     sample, (means, stds), 1, single_parameter=3)
+    >>> logpdf1.shape
+    (4,)
     """
     values = sample[:, single_parameter]  # shape: (num_sources,)
     means, stds = aux_parameters

@@ -5,22 +5,36 @@ from dataclasses import dataclass
 @dataclass
 class PosteriorChain:
     """
-    A dataclass to store the chains, number of sources, and number of parameters per source
+    A dataclass to store the chains, number of sources, and number of parameters per source.
 
     Parameters
     ----------
-    chain: np.ndarray
-        The chain of samples
-    num_sources: int
-        The number of sources
-    num_params_per_source: int
-        The number of parameters per source
-    trans_dimensional: bool
-        Whether the chain has variable number of sources
-    prob_in_model: ndarray
-        Probability of a source being in the model
-    cost_dict: dict
-        A dictionary of total cost for the labeling
+    chain : ndarray, shape (num_samples, num_sources, num_params_per_source)
+        The chain of samples.
+    num_sources : int
+        The number of sources.
+    num_params_per_source : int
+        The number of parameters per source.
+    trans_dimensional : bool, optional
+        Whether the chain has variable number of sources. Default is False.
+    prob_in_model : ndarray, optional
+        Probability of a source being in the model.
+    cost_dict : dict, optional
+        A dictionary of total cost for the labeling.
+
+    Attributes
+    ----------
+    chain : ndarray
+        Reshaped chain after initialization.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from petra.posterior_chain import PosteriorChain
+    >>> arr = np.random.randn(50, 2, 4)
+    >>> pc = PosteriorChain(arr, num_sources=2, num_params_per_source=4)
+    >>> pc.chain.shape
+    (50, 2, 4)
     """
 
     chain: np.ndarray
@@ -49,11 +63,55 @@ class PosteriorChain:
         self.chain[index] = value
 
     def get_chain(self, burn=0, thin=1):
+        """
+        Retrieve a sub-chain by discarding initial samples and thinning.
+
+        Parameters
+        ----------
+        burn : int, default 0
+            Number of initial samples to discard.
+        thin : int, default 1
+            Keep every `thin`-th sample.
+
+        Returns
+        -------
+        ndarray
+            Array of shape (ceil((n_samples - burn) / thin), n_sources, n_params_per_source).
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> arr = np.arange(60).reshape(20, 3, 1)
+        >>> pc = PosteriorChain(arr, num_sources=3, num_params_per_source=1)
+        >>> pc.get_chain(burn=5, thin=2).shape
+        (8, 3, 1)
+        """
         return self.chain[burn::thin]
 
     def expand_chain(self, max_num_sources):
         """
-        Expand the second dimension of the chain to the maximum number of sources.
+        Expand the chain to a larger number of sources, padding with NaNs.
+
+        Parameters
+        ----------
+        max_num_sources : int
+            Desired number of sources after expansion.
+
+        Returns
+        -------
+        PosteriorChain
+            New instance with `chain.shape == (n_samples, max_num_sources, n_params_per_source)`.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> arr = np.random.randn(10, 2, 3)
+        >>> pc = PosteriorChain(arr, num_sources=2, num_params_per_source=3)
+        >>> pc2 = pc.expand_chain(4)
+        >>> pc2.chain.shape
+        (10, 4, 3)
         """
         expanded_chain = np.zeros((self.chain.shape[0], max_num_sources, self.num_params_per_source)) + np.nan
         expanded_chain[:, :self.num_sources, :] = self.chain
@@ -61,7 +119,27 @@ class PosteriorChain:
     
     def randomize_entries(self, seed=None):
         """
-        Randomize the entries (second dimension) of the chain without repetition.
+        Shuffle the entries (second dimension) of each sample without repetition.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed for reproducible shuffling.
+
+        Returns
+        -------
+        PosteriorChain
+            New instance with entries randomized per sample.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> arr = np.arange(12).reshape(3, 2, 2)
+        >>> pc = PosteriorChain(arr, num_sources=2, num_params_per_source=2)
+        >>> pc2 = pc.randomize_entries(seed=0)
+        >>> pc2.chain.shape
+        (3, 2, 2)
         """
         # Shuffle along axis=1 (the second dimension) for each index in the first dimension
         rng = np.random.default_rng(seed=seed)

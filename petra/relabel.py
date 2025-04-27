@@ -10,19 +10,38 @@ from petra.cost_matrix import create_compute_cost_matrix
 
 def relabel_samples_one_iteration(chain, aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix: Callable):
     """
-    Takes in a chain of samples and a MV Gaussian fit and returns the sorted chain
+    Perform one iteration of label assignment using the Hungarian algorithm.
 
     Parameters
     ----------
-    chain: A numpy array of shape (num_chains, num_sources, num_params_per_source)
-    parameters: A set of parameters that fit the aux distribution to the chain
-    prob_in_model: A numpy array of shape (max_num_sources,) that contains the probability of each source being in the model
-    max_num_sources: The maximum number of sources to consider in the catalog (can be less than, equal to, or greater than the number of entries in the chain)
+    chain : ndarray, shape (n_samples, n_sources, n_params_per_source)
+        Posterior samples to relabel.
+    aux_parameters : tuple
+        Parameters (e.g., means, covariances) returned by a parametric fit.
+    prob_in_model : ndarray, shape (max_num_sources,)
+        Probability each source is present in the model.
+    max_num_sources : int
+        Maximum number of sources to consider in assignment.
+    compute_cost_matrix : callable
+        Function with signature
+        `(sample, aux_parameters, prob_in_model, max_num_sources) -> cost_matrix`.
 
-    Return
-    ------
-    relabeled_chain: A numpy array of shape (num_chains, num_sources, num_params_per_source)
-    cost: Cost of the optimal assignment
+    Returns
+    -------
+    relabeled_chain : ndarray, shape (n_samples, n_sources, n_params_per_source)
+        Samples reordered according to optimal assignments.
+    cost : float
+        Average assignment cost over all samples.
+
+    Examples
+    --------
+    >>> from petra.relabel import relabel_samples_one_iteration
+    >>> # chain: np.ndarray shape (100, 3, 5)
+    >>> # aux_params, prob: obtained from a fit
+    >>> relabeled, cost = relabel_samples_one_iteration(
+    ...     chain, aux_params, prob, 3, compute_cost_matrix)
+    >>> relabeled.shape
+    (100, 3, 5)
     """
     # TODO(Aaron): Parallelize this for loop over samples
     relabeled_list = []
@@ -43,19 +62,38 @@ def relabel_samples_one_iteration(chain, aux_parameters, prob_in_model, max_num_
 
 def relabel_posterior_chain_one_iteration(posterior_chain: PosteriorChain, aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix: Callable):
     """
-    Takes in a chain of samples and a MV Gaussian fit and returns the sorted chain
+    Perform one relabeling step on a PosteriorChain instance.
 
     Parameters
     ----------
-    chain: A PosteriorChain object
-    parameters: A set of parameters that fit the aux distribution to the chain
-    prob_in_model: A numpy array of shape (max_num_sources,) that contains the probability of each source being in the model
-    max_num_sources: The maximum number of sources to consider in the catalog (can be less than, equal to, or greater than the number of entries in the chain)
+    posterior_chain : PosteriorChain
+        Object containing chain, metadata and previous cost dictionary.
+    aux_parameters : tuple
+        Parameters from a parametric fit (e.g., means, covariances).
+    prob_in_model : ndarray, shape (max_num_sources,)
+        Probability each source is present in the model.
+    max_num_sources : int
+        Maximum number of sources for this iteration.
+    compute_cost_matrix : callable
+        Cost matrix builder function for each sample.
 
-    Return
-    ------
-    relabeled_chain: A PosteriorChain object
-    cost: Cost of the optimal assignment
+    Returns
+    -------
+    new_chain : PosteriorChain
+        PosteriorChain with updated `.chain` and `.cost_dict`.
+    cost : float
+        Assignment cost recorded under `new_chain.cost_dict[max_num_sources]`.
+
+    Examples
+    --------
+    >>> from petra.posterior_chain import PosteriorChain
+    >>> from petra.relabel import relabel_posterior_chain_one_iteration
+    >>> new_pc, cost = relabel_posterior_chain_one_iteration(
+    ...     pc, aux_params, prob, 3, compute_cost_matrix)
+    >>> isinstance(new_pc, PosteriorChain)
+    True
+    >>> cost == new_pc.cost_dict[3]
+    True
     """
     cost_dict = posterior_chain.cost_dict
     relabeled_chain, total_cost = relabel_samples_one_iteration(posterior_chain.get_chain(), aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix)
@@ -69,6 +107,34 @@ def create_relabel_samples(parametric_fit_function: Callable,
                            aux_distribution: Callable,
                            single_parameter: int = None,
                            eps: float = 1e-2):
+    """
+    Build a relabeling procedure combining fitting, cost computation, and assignment.
+
+    Parameters
+    ----------
+    parametric_fit_function : callable
+        Fit function `(chain, max_num_sources) -> aux_parameters`.
+    aux_distribution : callable
+        PDF function for cost matrix `(sample, aux_parameters, prob_in_model, idx)`.
+    single_parameter : int, optional
+        Fixes the parameter index for single-parameter fit/distribution.
+    eps : float, optional
+        Convergence tolerance for inclusion probabilities.
+
+    Returns
+    -------
+    relabel_samples : callable
+        Function with signature
+        `(posterior_chain, max_num_sources, num_iterations) -> PosteriorChain`.
+
+    Examples
+    --------
+    >>> from petra.relabel import create_relabel_samples
+    >>> relabel = create_relabel_samples(mv_normal_fit, mv_normal_aux_distribution)
+    >>> new_pc = relabel(pc, max_num_sources=3, num_iterations=10)
+    >>> isinstance(new_pc, PosteriorChain)
+    True
+    """
 
     # make all the necessary pieces
     param_fit = create_parametric_fit(parametric_fit_function, single_parameter=single_parameter)
@@ -78,21 +144,29 @@ def create_relabel_samples(parametric_fit_function: Callable,
                         max_num_sources: int = None,
                         num_iterations: int = 200):
         """
-        Takes in a posterior_chain and relabels the samples using a multivariate normal auxiliary fitting distribution
+        Iteratively relabel a PosteriorChain with a chosen aux distribution.
 
         Parameters
         ----------
-        posterior_chain: A PosteriorChain object
-        max_num_sources: The maximum number of sources to consider in the catalog (can be less than, equal to, or greater than the number of entries in the chain)
-        num_iterations: How many tries to use before stopping the algorithm
-        init_parameter_index: Which parameter index to use in the initialization procedures
-        shuffle_entries: Whether to shuffle the entries in the chain at the start
-        shuffle_seed: Seed for the random number generator
+        posterior_chain : PosteriorChain
+            Chain to process; may be expanded or trimmed.
+        max_num_sources : int, optional
+            Target number of sources (defaults to chain.num_sources).
+        num_iterations : int, default 200
+            Maximum relabeling iterations before stopping.
 
-        Return
-        ------
-        relabeled_chain: A PosteriorChain object
-        cost: Cost of the optimal assignment
+        Returns
+        -------
+        PosteriorChain
+            Relabeled chain with updated cost history.
+
+        Examples
+        --------
+        >>> from petra.relabel import create_relabel_samples
+        >>> relabel = create_relabel_samples(mv_normal_fit, mv_normal_aux_distribution)
+        >>> result_pc = relabel(pc, max_num_sources=4, num_iterations=50)
+        >>> result_pc.cost_dict.keys()
+        dict_keys([4])
         """
 
         # if shuffle_entries:

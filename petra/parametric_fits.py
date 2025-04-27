@@ -7,27 +7,30 @@ from petra.utils import find_prob_in_model
 
 def create_parametric_fit(fit_function, single_parameter=None):
     """
-    Wrap a fit function to unify its interface.
+    Wrap a fitting function to unify its interface.
 
     Parameters
     ----------
     fit_function : callable
-        Function with signature
-        `(chain, max_num_sources[, single_parameter])` that computes a parametric fit.
+        A function with signature
+        `(chain, max_num_sources[, fit_parameter])` that returns fit parameters.
     single_parameter : int, optional
-        If provided, fixes the index of the parameter for single‐parameter fits.
+        If provided, fixes the parameter index for single‐parameter fit functions.
 
     Returns
     -------
     parametric_fit : callable
-        A function with signature `(chain, max_num_sources)` that returns the fit.
+        A function with signature `(chain, max_num_sources)`
+        that calls `fit_function` and returns its output.
 
     Examples
     --------
     >>> from petra.parametric_fits import create_parametric_fit, uni_normal_fit_single_parameter
-    >>> fit = create_parametric_fit(uni_normal_fit_single_parameter, single_parameter=0)
-    >>> chain = np.random.randn(100, 2, 3)
-    >>> means, stds = fit(chain, max_num_sources=2)
+    >>> fit = create_parametric_fit(uni_normal_fit_single_parameter, single_parameter=2)
+    >>> chain = np.random.randn(100, 3, 5)
+    >>> means, stds = fit(chain, max_num_sources=3)
+    >>> means.shape, stds.shape
+    ((3,), (3,))
     """
 
     if single_parameter is not None:
@@ -53,31 +56,29 @@ def create_parametric_fit(fit_function, single_parameter=None):
 
 def mv_normal_fit(chain, max_num_sources):
     """
-    Fit a multivariate normal distribution to each source across samples.
+    Fit a multivariate normal distribution to each source.
 
     Parameters
     ----------
-    chain : ndarray, shape (num_samples, num_entries, num_params_per_source)
-        Posterior samples array.
+    chain : ndarray, shape (n_samples, n_sources, n_params)
+        Posterior samples.
     max_num_sources : int
         Number of sources to fit.
 
     Returns
     -------
-    means : ndarray, shape (max_num_sources, num_params_per_source)
-        Mean vector for each source.
-    cov_matrices : ndarray, shape (max_num_sources, num_params_per_source, num_params_per_source)
-        Covariance matrix for each source.
+    means : ndarray, shape (max_num_sources, n_params)
+        Mean vectors for each source.
+    cov_matrices : ndarray, shape (max_num_sources, n_params, n_params)
+        Covariance matrices for each source.
 
     Examples
     --------
     >>> from petra.parametric_fits import mv_normal_fit
-    >>> chain = np.random.randn(500, 3, 2)
-    >>> means, covs = mv_normal_fit(chain, max_num_sources=3)
-    >>> means.shape
-    (3, 2)
-    >>> covs.shape
-    (3, 2, 2)
+    >>> chain = np.random.randn(500, 4, 2)
+    >>> means, covs = mv_normal_fit(chain, max_num_sources=4)
+    >>> means.shape, covs.shape
+    ((4, 2), (4, 2, 2))
     """
 
     means = []
@@ -104,8 +105,8 @@ def uni_normal_fit_single_parameter(chain, max_num_sources, fit_parameter):
 
     Parameters
     ----------
-    chain : ndarray, shape (num_samples, num_entries, num_params_per_source)
-        Posterior samples array.
+    chain : ndarray, shape (n_samples, n_sources, n_params)
+        Posterior samples.
     max_num_sources : int
         Number of sources to fit.
     fit_parameter : int
@@ -114,17 +115,17 @@ def uni_normal_fit_single_parameter(chain, max_num_sources, fit_parameter):
     Returns
     -------
     means : ndarray, shape (max_num_sources,)
-        Mean of the fitted normal for each source.
+        Means for each source.
     stds : ndarray, shape (max_num_sources,)
-        Standard deviation of the fitted normal for each source.
+        Standard deviations for each source.
 
     Examples
     --------
     >>> from petra.parametric_fits import uni_normal_fit_single_parameter
-    >>> chain = np.random.randn(200, 2, 5)
-    >>> means, stds = uni_normal_fit_single_parameter(chain, max_num_sources=2, fit_parameter=3)
-    >>> len(means), len(stds)
-    (2, 2)
+    >>> chain = np.random.randn(200, 3, 5)
+    >>> means, stds = uni_normal_fit_single_parameter(chain, max_num_sources=3, fit_parameter=1)
+    >>> means.shape, stds.shape
+    ((3,), (3,))
     """
     means = []
     stds = []
@@ -150,36 +151,34 @@ def uni_normal_fit_single_parameter(chain, max_num_sources, fit_parameter):
 
 def update_parametric_fit_and_prob_in_model(posterior_chain, max_num_sources, parametric_fit_function: Callable, eps=1e-2):
     """
-    Compute both the parametric fit and each source's inclusion probability.
+    Compute parametric fit and inclusion probabilities.
 
     Parameters
     ----------
     posterior_chain : PosteriorChain
-        Object containing the chain and metadata.
+        Object with `.get_chain()` method returning an ndarray.
     max_num_sources : int
-        Number of sources to include.
+        Number of sources to consider.
     parametric_fit_function : callable
-        Function `(chain, max_num_sources) -> fit_params`.
+        Function `(chain, max_num_sources) -> aux_params`.
     eps : float, optional
-        Tolerance for inclusion probability (default is 1e-2).
+        Threshold for inclusion probability (default 1e-2).
 
     Returns
     -------
     aux_params : tuple
         Output of `parametric_fit_function`, e.g. (means, covs) or (means, stds).
     prob_in_model : ndarray, shape (max_num_sources,)
-        Probability that each source is in the model.
+        Inclusion probabilities.
 
     Examples
     --------
     >>> from petra.parametric_fits import update_parametric_fit_and_prob_in_model, mv_normal_fit
     >>> from petra.posterior_chain import PosteriorChain
-    >>> chain = np.random.randn(100, 4, 2)
-    >>> pc = PosteriorChain(chain, 4, 2, True, None, {})
-    >>> aux, probs = update_parametric_fit_and_prob_in_model(
-    ...     pc, max_num_sources=4, parametric_fit_function=lambda c, m: mv_normal_fit(c, m))
-    >>> len(probs)
-    4
+    >>> pc = PosteriorChain(np.random.randn(150, 4, 2), 4, 2, True, None, {})
+    >>> aux, probs = update_parametric_fit_and_prob_in_model(pc, 4, mv_normal_fit)
+    >>> aux[0].shape, probs.shape
+    ((4, 2), (4,))
     """
     aux_params = parametric_fit_function(posterior_chain.get_chain(), max_num_sources)
     prob_in_model = find_prob_in_model(posterior_chain.get_chain(), max_num_sources, eps=eps)

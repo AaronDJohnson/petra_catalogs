@@ -12,9 +12,34 @@ def load_samples(path,
                  thin=1,
                  remove_low_numbers=False):
     """
-    Unified loader. If `path` is a directory → UCBMCMC.
-    If it's a file, examine n_cols to pick product-space (n_cols - 5)
-    vs fixed-num-sources (n_cols - 4).
+    Unified loader for posterior sample chains.
+
+    Parameters
+    ----------
+    path : str
+        Path to a chain file or directory of UCBMCMC outputs.
+    num_params_per_source : int
+        Number of parameters per source.
+    fill_value : scalar, optional
+        Value to use for padding missing entries (default np.nan).
+    burn : int, optional
+        Number of initial samples to discard (default 0).
+    thin : int, optional
+        Interval for thinning; keep every `thin`-th sample (default 1).
+    remove_low_numbers : bool, optional
+        If True, skip UCBMCMC files with ≤ 8 samples (default False).
+
+    Returns
+    -------
+    PosteriorChain
+        Loaded and reshaped posterior samples.
+
+    Examples
+    --------
+    >>> from petra.samples_io import load_samples
+    >>> pc = load_samples('chains/fixed_chain.dat', num_params_per_source=4, burn=5, thin=2)
+    >>> pc.chain.shape
+    (ceil((n_samples-5)/2), n_sources, 4)
     """
     if os.path.isdir(path):
         return load_samples_ucbmcmc(path,
@@ -47,10 +72,29 @@ def load_samples(path,
 
 def load_samples_product_space(filepath, num_params_per_source, fill_value=np.nan):
     """
-    Load chains from a file and reshape them into a 3D array
-    with dimensions (num_samples, num_sources, num_params)
+    Load a product-space chain from a text file.
 
-    Assumes the chain is organized as (param1_source1, param2_source1, ..., paramN_source1, paramN_source2, ...)
+    Parameters
+    ----------
+    filepath : str
+        Path to the product-space chain file.
+    num_params_per_source : int
+        Number of parameters per source.
+    fill_value : scalar, optional
+        Value to use for padding missing entries (default np.nan).
+
+    Returns
+    -------
+    PosteriorChain
+        PosteriorChain with shape (n_samples, max_num_sources, num_params_per_source)
+        and `trans_dimensional=True`.
+
+    Examples
+    --------
+    >>> from petra.samples_io import load_samples_product_space
+    >>> pc = load_samples_product_space('chain.ps.txt', num_params_per_source=3)
+    >>> pc.chain.shape
+    (n_samples, max_num_sources, 3)
     """
     with open(filepath, "r") as f:
         chain = np.loadtxt(f)
@@ -72,10 +116,30 @@ def load_samples_product_space(filepath, num_params_per_source, fill_value=np.na
 
 def load_samples_fixed_num_sources(filepath, num_params_per_source, burn=0, thin=1):
     """
-    Load chains from a file and reshape them into a 3D array
-    with dimensions (num_samples, num_sources, num_params)
+    Load a fixed-num-sources chain from a text file.
 
-    Assumes the chain is organized as (param1_source1, param2_source1, ..., paramN_source1, paramN_source2, ...)
+    Parameters
+    ----------
+    filepath : str
+        Path to the fixed-num-sources chain file.
+    num_params_per_source : int
+        Number of parameters per source.
+    burn : int, optional
+        Number of initial samples to discard (default 0).
+    thin : int, optional
+        Interval for thinning; keep every `thin`-th sample (default 1).
+
+    Returns
+    -------
+    PosteriorChain
+        PosteriorChain with shape (n_samples, num_sources, num_params_per_source).
+
+    Examples
+    --------
+    >>> from petra.samples_io import load_samples_fixed_num_sources
+    >>> pc = load_samples_fixed_num_sources('chain.txt', num_params_per_source=2, burn=2, thin=3)
+    >>> pc.chain.shape
+    (ceil((n_samples-2)/3), num_sources, 2)
     """
     with open(filepath, "r") as f:
         chain = np.loadtxt(f)
@@ -87,17 +151,33 @@ def load_samples_fixed_num_sources(filepath, num_params_per_source, burn=0, thin
 
 def load_samples_ucbmcmc(chain_folder, fill_value=np.nan, burn=0, thin=1, remove_low_numbers=False):
     """
-    Load chains from files and reshape them into a 3D array
-    with dimensions (num_samples, num_sources, num_params).
+    Load multiple UCBMCMC chain files from a directory.
 
-    Only files with more than 8 samples (i.e. more samples than the number
-    of dimensions in the model) are loaded.
+    Parameters
+    ----------
+    chain_folder : str
+        Directory containing `dimension_chain.dat.*` files.
+    fill_value : scalar, optional
+        Value to use for padding missing entries (default np.nan).
+    burn : int, optional
+        Number of initial samples to discard after loading (default 0).
+    thin : int, optional
+        Interval for thinning; keep every `thin`-th sample (default 1).
+    remove_low_numbers : bool, optional
+        If True, exclude files with ≤ 8 samples (default False).
 
-    Assumes the chain is organized as:
-      (param1_source1, param2_source1, ..., paramN_source2,
-       param1_source2, param2_source2, ..., paramN_source2,
-       ...,
-       param1_sourceM, param2_sourceM, ..., paramN_sourceM)
+    Returns
+    -------
+    PosteriorChain
+        PosteriorChain with shape (n_total_samples, max_sources, num_params_per_source)
+        and `trans_dimensional=True`.
+
+    Examples
+    --------
+    >>> from petra.samples_io import load_samples_ucbmcmc
+    >>> pc = load_samples_ucbmcmc('ucbmcmc_chains/', burn=5, thin=2)
+    >>> pc.chain.shape
+    (total_samples_after_burn_and_thin, max_sources, num_params_per_source)
     """
 
     # Find and sort all matching filepaths.
