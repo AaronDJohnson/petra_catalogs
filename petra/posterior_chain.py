@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+import pandas as pd
 
 
 @dataclass
@@ -150,3 +151,69 @@ class PosteriorChain:
         for i in range(self.chain.shape[0]):
             rng.shuffle(chain[i])
         return PosteriorChain(chain, self.num_sources, self.num_params_per_source, self.trans_dimensional, self.prob_in_model, self.cost_dict)
+
+    def to_feather(self, feather_filepath):
+        """
+        Save the PosteriorChain to a Feather file including chain data and metadata.
+
+        Parameters
+        ----------
+        feather_filepath : str
+            Path to the output Feather file.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> arr = np.random.randn(5, 2, 3)
+        >>> pc = PosteriorChain(arr, num_sources=2, num_params_per_source=3)
+        >>> pc.to_feather('test_pc.feather')
+        >>> import os
+        >>> os.path.exists('test_pc.feather')
+        True
+        """
+        df = pd.DataFrame(self.chain.reshape(-1, self.chain.shape[1] * self.chain.shape[2]))
+        df['num_sources'] = self.chain.shape[1]
+        df['num_params_per_source'] = self.chain.shape[2]
+        df['transdimensional'] = int(self.trans_dimensional)
+        df.to_feather(feather_filepath)
+
+    @staticmethod
+    def read_feather(feather_filepath):
+        """
+        Load a PosteriorChain from a Feather file with stored chain data and metadata.
+
+        Parameters
+        ----------
+        feather_filepath : str
+            Path to the Feather file produced by `to_feather`.
+
+        Returns
+        -------
+        PosteriorChain
+            A new PosteriorChain instance reconstructed from the file.
+
+        Examples
+        --------
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> # assume 'test_pc.feather' exists from to_feather()
+        >>> pc2 = PosteriorChain.read_feather('test_pc.feather')
+        >>> isinstance(pc2, PosteriorChain)
+        True
+        >>> pc2.chain.shape
+        (5, 2, 3)
+        """
+        df = pd.read_feather(feather_filepath)
+        num_sources = df['num_sources'][0]
+        num_params_per_source = df['num_params_per_source'][0]
+        transdimensional = bool(df['transdimensional'][0])
+        # remove these three parameters from the DataFrame
+        df.drop(columns=['num_sources', 'num_params_per_source', 'transdimensional'], inplace=True)
+        # reshape the DataFrame to the original shape
+        chain = df.values.reshape(-1, num_sources, num_params_per_source)
+        return PosteriorChain(chain, num_sources, num_params_per_source, transdimensional)
+    
