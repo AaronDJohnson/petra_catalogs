@@ -2,7 +2,7 @@ from petra.posterior_chain import PosteriorChain
 from petra.relabel import create_relabel_samples
 from petra.aux_distributions import mv_normal_aux_distribution
 from petra.parametric_fits import mv_normal_fit
-from petra.initialization import relabel_uni_normal_one_parameter
+from petra.initialization import relabel_univariate_normal
 
 
 def relabel_mv_normal(posterior_chain: PosteriorChain,
@@ -124,7 +124,7 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
     # initialize here:
     if initialization_param_index is not None:
         print("Initializing with univariate normal distribution.")
-        initial_posterior_chain = relabel_uni_normal_one_parameter(posterior_chain,
+        initial_posterior_chain = relabel_univariate_normal(posterior_chain,
                                                                    max_num_sources=max_num_sources,
                                                                    num_iterations=init_num_iterations,
                                                                    init_parameter_index=initialization_param_index)
