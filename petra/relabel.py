@@ -201,8 +201,7 @@ def create_relabel_samples(parametric_fit_function: Callable,
             # break if converged
             if (delta_cost_of_assignment == 0):
                 print(f"Stopped after {iteration + 1} iterations because the cost didn't change from the previous iteration.")
-                new_parametric_fit = old_parametric_fit
-                new_prob_in_model = old_prob_in_model
+                new_parametric_fit, new_prob_in_model = update_parametric_fit_and_prob_in_model(old_posterior_chain, max_num_sources, param_fit, eps=0)
                 new_posterior_chain = old_posterior_chain
                 break
 
