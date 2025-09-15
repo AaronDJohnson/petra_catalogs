@@ -1,7 +1,9 @@
 import numpy as np
+import jax.numpy as jnp
+from scipy.stats import uniform
 
 
-def find_prob_in_model(chain, max_num_sources, eps=1e-2):
+def find_prob_in_model(chain, max_num_sources, eps=1e-6):
     """
     Compute the probability that each source is present in the model.
 
@@ -137,3 +139,119 @@ def sort_by_number(filenames):
 
     # Sort the filenames using the extracted number
     return sorted(filenames, key=extract_number)
+
+
+def make_uniform_prior(chain: np.ndarray):
+    """
+    Create a uniform prior distribution over each parameter based on the full range observed in the chain.
+
+    Parameters
+    ----------
+    chain : ndarray, shape (n_samples, n_sources, n_params_per_source)
+        Posterior samples array; NaNs indicate missing entries.
+
+    Returns
+    -------
+    uniform_dist : scipy.stats._continuous_distns.uniform_gen
+        A SciPy `uniform` distribution with `loc=mins` and `scale=maxs-mins`,
+        where `mins` and `maxs` are the per-parameter minima and maxima
+        over all samples and sources.
+    """
+    all_entries = np.reshape(chain, (-1, chain.shape[2]))
+    mins = np.nanmin(all_entries, axis=0)
+    maxs = np.nanmax(all_entries, axis=0)
+    uniform_dist = uniform(loc=mins, scale=maxs - mins)
+    value = np.sum(uniform_dist.logpdf(all_entries[0]))  # Use the first set of parameters for logpdf
+
+    def uniform_prior():
+        """
+        Compute the PDF of the uniform prior for a given sample.
+
+        Parameters
+        ----------
+        sample : ndarray, shape (n_samples, n_params_per_source)
+            Sample of parameter values to evaluate.
+
+        Returns
+        -------
+        pdf_values : ndarray, shape (n_samples,)
+            PDF values for each sample point.
+        """
+        pass
+
+    def log_prob(sample):
+        # Fix for stacking error: return array matching sample's source dimension
+        sample = jnp.asarray(sample)
+        if sample.ndim == 1:
+            # Single source: return scalar
+            return value
+        elif sample.ndim == 2:
+            # Multiple sources: return array with same log-prob for each source
+            return jnp.full(sample.shape[0], value)
+        else:
+            raise ValueError("Sample must be 1D or 2D array.")
+
+    uniform_prior.log_prob = log_prob
+
+    return uniform_prior
+
+
+def process_array(arr):
+    """
+    Checks for duplicate values in a sorted numpy array.
+    If duplicates exist, perturbs the values slightly to make them unique
+    and resorts the array if necessary after perturbation.
+    
+    Parameters:
+    arr (numpy.ndarray): A sorted numpy array.
+    
+    Returns:
+    numpy.ndarray: The processed array with no duplicates.
+    """
+    # Convert to float for perturbation
+    arr = np.sort(arr)
+    arr = np.asarray(arr, dtype=float)
+
+    # Check for duplicates
+    unique, counts = np.unique(arr, return_counts=True)
+    if np.all(counts <= 1):
+        return arr
+
+    # Determine epsilon for perturbation
+    max_count = np.max(counts)
+    diffs = np.diff(arr)
+    pos_diffs = diffs[diffs > 0]
+    if len(pos_diffs) > 0:
+        min_pos_diff = np.min(pos_diffs)
+        epsilon = min_pos_diff / (max_count * 2)
+    else:
+        epsilon = 1e-10
+
+    # Copy array for modification
+    new_arr = arr.copy()
+    
+    # Perturb duplicates
+    i = 0
+    while i < len(new_arr):
+        val = new_arr[i]
+        j = i
+        while j < len(new_arr) and new_arr[j] == val:
+            j += 1
+        group_size = j - i
+        if group_size > 1:
+            for k in range(group_size):
+                new_arr[i + k] += k * epsilon
+        i = j
+
+    # Check if still sorted
+    is_sorted = np.all(np.diff(new_arr) >= 0)
+    if not is_sorted:
+        new_arr.sort()
+
+    return new_arr
+
+def find_uniform_bounds(chain: np.ndarray):
+    all_entries = chain.reshape(-1, chain.shape[2])
+    lower_bound = np.nanmin(all_entries, axis=0)
+    upper_bound = np.nanmax(all_entries, axis=0)
+    return lower_bound, upper_bound
