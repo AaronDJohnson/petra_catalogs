@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 
 def mv_normal_aux_distribution(sample: np.ndarray,
-                               aux_parameters: Tuple[List[np.ndarray]],
+                               aux_parameters: Tuple[List[np.ndarray], List[np.ndarray]],
                                source_index) -> np.ndarray:
     """
     Compute the log‑pdf of multivariate normal distributions for each source.
@@ -65,7 +65,7 @@ def mv_normal_aux_distribution(sample: np.ndarray,
 
 
 def uni_normal_aux_distribution_single_parameter(sample: np.ndarray,
-                                                 aux_parameters: Tuple[List[np.ndarray]],
+                                                 aux_parameters: Tuple[List[np.ndarray], List[np.ndarray]],
                                                  source_index,
                                                  single_parameter: int) -> np.ndarray:
     """
