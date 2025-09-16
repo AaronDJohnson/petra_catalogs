@@ -7,38 +7,38 @@ from petra.utils import find_prob_in_model
 
 def create_parametric_fit(fit_function, single_parameter=None):
     """
-    Wrap a fitting function to unify its interface.
+    Wrap a fitting function in a unified interface.
 
     Parameters
     ----------
-    fit_function : callable
+    fit_function: callable
         A function with signature
         `(chain, max_num_sources[, fit_parameter])` that returns fit parameters.
-    single_parameter : int, optional
-        If provided, fixes the parameter index for single‐parameter fit functions.
+    single_parameter: int, optional
+        If provided, fixes the parameter index for single-parameter fit functions.
 
     Returns
     -------
-    parametric_fit : callable
+    parametric_fit: callable
         A function with signature `(chain, max_num_sources)`
         that calls `fit_function` and returns its output.
 
     Examples
     --------
     >>> from petra.parametric_fits import create_parametric_fit, uni_normal_fit_single_parameter
+    >>> import numpy as np
     >>> fit = create_parametric_fit(uni_normal_fit_single_parameter, single_parameter=2)
     >>> chain = np.random.randn(100, 3, 5)
     >>> means, stds = fit(chain, max_num_sources=3)
     >>> means.shape, stds.shape
     ((3,), (3,))
     """
-
     if single_parameter is not None:
         fit_function = partial(fit_function, fit_parameter=single_parameter)
 
     def parametric_fit(chain, max_num_sources):
         """
-        Fit a parametric distribution to the chain of samples .
+        Fit a parametric distribution to the chain of samples.
 
         Parameters
         ----------
@@ -56,7 +56,7 @@ def create_parametric_fit(fit_function, single_parameter=None):
 
 def mv_normal_fit(chain, max_num_sources):
     """
-    Fit a multivariate normal distribution to each source.
+    Fit a multivariate normal distribution to each entry.
 
     Parameters
     ----------
@@ -75,12 +75,12 @@ def mv_normal_fit(chain, max_num_sources):
     Examples
     --------
     >>> from petra.parametric_fits import mv_normal_fit
+    >>> import numpy as np
     >>> chain = np.random.randn(500, 4, 2)
     >>> means, covs = mv_normal_fit(chain, max_num_sources=4)
     >>> means.shape, covs.shape
     ((4, 2), (4, 2, 2))
     """
-
     means = []
     cov_matrices = []
     for source in range(max_num_sources):
@@ -88,7 +88,7 @@ def mv_normal_fit(chain, max_num_sources):
         valid = ~np.isnan(sample_i).any(axis=1)
         valid_samples = sample_i[valid]
         if valid_samples.shape[0] < 8:
-            print('Fewer than 8 values in source index {}. Appending normal distribution fit to all entries.'.format(source))
+            print(f'Fewer than 8 values in source index {source}. Appending normal distribution fit to all entries.')
             df_all = pd.DataFrame(chain.reshape(-1, chain.shape[2]))
             means.append(np.array(df_all.dropna().mean()))
             cov_matrices.append(np.array(df_all.dropna().cov()))
@@ -105,18 +105,18 @@ def uni_normal_fit_single_parameter(chain, max_num_sources, fit_parameter):
 
     Parameters
     ----------
-    chain : ndarray, shape (n_samples, n_sources, n_params)
+    chain: ndarray, shape (n_samples, n_sources, n_params)
         Posterior samples.
-    max_num_sources : int
+    max_num_sources: int
         Number of sources to fit.
-    fit_parameter : int
+    fit_parameter: int
         Index of the parameter to fit.
 
     Returns
     -------
-    means : ndarray, shape (max_num_sources,)
+    means: ndarray, shape (max_num_sources,)
         Means for each source.
-    stds : ndarray, shape (max_num_sources,)
+    stds: ndarray, shape (max_num_sources,)
         Standard deviations for each source.
 
     Examples

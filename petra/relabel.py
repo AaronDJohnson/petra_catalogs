@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import optimize
 from typing import Callable
+from tqdm import tqdm
 
 from petra.utils import fill_missing_indices
 from petra.posterior_chain import PosteriorChain
@@ -43,10 +44,9 @@ def relabel_samples_one_iteration(chain, aux_parameters, prob_in_model, max_num_
     >>> relabeled.shape
     (100, 3, 5)
     """
-    # TODO(Aaron): Parallelize this for loop over samples
     relabeled_list = []
     total_cost = 0
-    for sample in chain:
+    for sample in tqdm(chain):
         cost_matrix = compute_cost_matrix(sample, aux_parameters, prob_in_model, max_num_sources)
         total_entries = max(len(sample), max_num_sources)  # pick the larger of number of aux distributions or sample entries
         row_ind, col_ind = optimize.linear_sum_assignment(cost_matrix, maximize=True)  # solve the linear sum assignment problem
@@ -60,7 +60,7 @@ def relabel_samples_one_iteration(chain, aux_parameters, prob_in_model, max_num_
     return relabeled_samples, total_cost
 
 
-def relabel_posterior_chain_one_iteration(posterior_chain: PosteriorChain, aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix: Callable):
+def relabel_posterior_chain_one_iteration(posterior_chain: PosteriorChain, aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix: Callable) -> PosteriorChain:
     """
     Perform one relabeling step on a PosteriorChain instance.
 
@@ -105,7 +105,7 @@ def relabel_posterior_chain_one_iteration(posterior_chain: PosteriorChain, aux_p
 
 def create_relabel_samples(parametric_fit_function: Callable,
                            aux_distribution: Callable,
-                           single_parameter: int = None,
+                           single_parameter: int|None = None,
                            eps: float = 1e-2):
     """
     Build a relabeling procedure combining fitting, cost computation, and assignment.
@@ -141,7 +141,7 @@ def create_relabel_samples(parametric_fit_function: Callable,
     compute_cost_matrix = create_compute_cost_matrix(aux_distribution, single_parameter=single_parameter)
 
     def relabel_samples(posterior_chain: PosteriorChain,
-                        max_num_sources: int = None,
+                        max_num_sources: int|None = None,
                         num_iterations: int = 200):
         """
         Iteratively relabel a PosteriorChain with a chosen aux distribution.
@@ -180,7 +180,7 @@ def create_relabel_samples(parametric_fit_function: Callable,
             raise ValueError("The maximum number of sources cannot be less than the number of entries in the chain.")
 
         print()
-        print(f"Sorting the posterior chain:\n\tMaximum number of iterations: {num_iterations}\n\tMaximum number of source labels:{max_num_sources}\n")
+        print(f"Sorting the posterior chain:\n\tMaximum number of iterations: {num_iterations}\n\tMaximum number of source labels: {max_num_sources}\n")
 
         # set up the for loop
         old_posterior_chain = posterior_chain

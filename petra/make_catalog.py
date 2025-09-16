@@ -6,7 +6,7 @@ from petra.initialization import relabel_univariate_normal
 
 
 def relabel_mv_normal(posterior_chain: PosteriorChain,
-                      max_num_sources: int = None,
+                      max_num_sources: int|None = None,
                       num_iterations: int = 20,
                       eps=1e-2):
     """
@@ -61,8 +61,8 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
                            max_num_sources: int,
                            num_iterations: int = 200,
                            init_num_iterations: int = 200,
-                           initialization_param_index: int = None,
-                           shuffle_seed: int = None):
+                           initialization_param_index: int|None = None,
+                           shuffle_seed: int|None = None):
     """
     Build a catalog by relabeling samples using multivariate normal fits,
     with optional univariate initialization and shuffling.

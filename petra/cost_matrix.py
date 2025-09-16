@@ -3,7 +3,7 @@ from typing import Callable, List
 from functools import partial
 
 
-def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int = None) -> Callable:
+def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int|None = None) -> Callable:
     """
     Create a cost-matrix computation function for a given auxiliary distribution.
 
