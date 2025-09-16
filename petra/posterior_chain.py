@@ -42,8 +42,8 @@ class PosteriorChain:
     num_sources: int
     num_params_per_source: int
     trans_dimensional: bool = False
-    prob_in_model: np.ndarray = None
-    cost_dict: dict = None
+    prob_in_model: np.ndarray|None = None
+    cost_dict: dict|None = None
 
     def __post_init__(self):
         if self.cost_dict is None:
@@ -89,6 +89,43 @@ class PosteriorChain:
         (8, 3, 1)
         """
         return self.chain[burn::thin]
+
+    def get_valid_chain_entry(self, entry_index, burn=0, thin=1):
+        """
+        Retrieve a sub-chain entry containing only samples that have no NaNs across
+        all sources and parameters.
+
+        Parameters
+        ----------
+        entry_index : int
+            (Unused) retained for compatibility. This method filters samples
+            based on NaNs across the entire chain, not a single entry.
+        burn : int, default 0
+            Number of initial samples to discard before filtering.
+        thin : int, default 1
+            Keep every `thin`-th sample after discarding `burn` samples.
+
+        Returns
+        -------
+        ndarray
+            Array of shape (n_valid_samples, n_sources, n_params_per_source)
+            containing only those samples with no NaNs in any source or
+            parameter.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from petra.posterior_chain import PosteriorChain
+        >>> arr = np.array([
+        ...     [[1.0, np.nan], [2.0, 3.0]],
+        ...     [[4.0, 5.0],        [6.0, 7.0]],
+        ... ])
+        >>> pc = PosteriorChain(arr, num_sources=2, num_params_per_source=2)
+        >>> pc.get_valid_chain_entry(0).shape
+        (1, 2, 2)
+        """
+        chain = self.get_chain(burn=burn, thin=thin)[:, entry_index, :]
+        return chain[~np.isnan(chain).any(axis=(1))]
 
     def expand_chain(self, max_num_sources):
         """
@@ -216,4 +253,3 @@ class PosteriorChain:
         # reshape the DataFrame to the original shape
         chain = df.values.reshape(-1, num_sources, num_params_per_source)
         return PosteriorChain(chain, num_sources, num_params_per_source, transdimensional)
-    
