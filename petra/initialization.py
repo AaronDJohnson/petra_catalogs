@@ -5,7 +5,7 @@ from petra.relabel import create_relabel_samples
 
 
 def relabel_univariate_normal(posterior_chain: PosteriorChain,
-                              max_num_sources: int = None,
+                              max_num_sources: int|None = None,
                               num_iterations: int = 20,
                               init_parameter_index: int = 0,
                               eps=1e-2):
