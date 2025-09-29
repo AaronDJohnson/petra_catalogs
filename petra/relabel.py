@@ -1,12 +1,38 @@
 import numpy as np
 from scipy import optimize
-from typing import Callable
+from typing import Callable, Optional
 from tqdm import tqdm
+import os
 
 from petra.utils import fill_missing_indices
 from petra.posterior_chain import PosteriorChain
 from petra.parametric_fits import update_parametric_fit_and_prob_in_model, create_parametric_fit
 from petra.cost_matrix import create_compute_cost_matrix
+
+
+def _checkpoint_posterior_chain(posterior_chain: PosteriorChain, checkpoint_dir: str, iteration: int) -> None:
+    """
+    Save a PosteriorChain to disk as a checkpoint.
+
+    Parameters
+    ----------
+    posterior_chain : PosteriorChain
+        The chain to save
+    checkpoint_dir : str
+        Directory to save checkpoints in
+    iteration : int
+        Current iteration number (used in filename)
+    """
+    # Create directory if it doesn't exist
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    # Create filename with iteration number
+    filename = f"posterior_chain_iteration_{iteration:03d}.feather"
+    filepath = os.path.join(checkpoint_dir, filename)
+
+    # Save the chain
+    posterior_chain.to_feather(filepath)
+    print(f"  Checkpoint saved: {filepath}")
 
 
 def relabel_samples_one_iteration(chain, aux_parameters, prob_in_model, max_num_sources, compute_cost_matrix: Callable):
@@ -142,7 +168,8 @@ def create_relabel_samples(parametric_fit_function: Callable,
 
     def relabel_samples(posterior_chain: PosteriorChain,
                         max_num_sources: int|None = None,
-                        num_iterations: int = 200):
+                        num_iterations: int = 200,
+                        checkpoint_dir: Optional[str] = None):
         """
         Iteratively relabel a PosteriorChain with a chosen aux distribution.
 
@@ -154,6 +181,8 @@ def create_relabel_samples(parametric_fit_function: Callable,
             Target number of sources (defaults to chain.num_sources).
         num_iterations : int, default 200
             Maximum relabeling iterations before stopping.
+        checkpoint_dir : str, optional
+            Directory to save iteration checkpoints. If None, no checkpointing.
 
         Returns
         -------
@@ -167,6 +196,9 @@ def create_relabel_samples(parametric_fit_function: Callable,
         >>> result_pc = relabel(pc, max_num_sources=4, num_iterations=50)
         >>> result_pc.cost_dict.keys()
         dict_keys([4])
+        >>> # With checkpointing
+        >>> result_pc = relabel(pc, max_num_sources=4, num_iterations=50,
+        ...                    checkpoint_dir="./checkpoints")
         """
 
         # if shuffle_entries:
@@ -197,6 +229,10 @@ def create_relabel_samples(parametric_fit_function: Callable,
             delta_cost_of_assignment = new_cost_of_assignment - old_cost_of_assignment
             print(f"Iteration {iteration + 1}: Difference in cost of assignment is {delta_cost_of_assignment} with total cost of {new_cost_of_assignment}.")
             print(f"\tProbabilities in model: {new_prob_in_model}")
+
+            # Save checkpoint if requested
+            if checkpoint_dir is not None:
+                _checkpoint_posterior_chain(new_posterior_chain, checkpoint_dir, iteration + 1)
 
             # break if converged
             if (delta_cost_of_assignment == 0):
