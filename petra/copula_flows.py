@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 import numpy as np
 from petra.parametric_fits import update_parametric_fit_and_prob_in_model
 from petra.cost_matrix import create_compute_cost_matrix
@@ -22,6 +22,47 @@ from equinox import filter_jit
 
 
 jax.config.update('jax_enable_x64', False)
+
+
+def _create_empirical_transforms_for_source(chain_entry: np.ndarray, uniform_lower_bound: np.ndarray, uniform_upper_bound: np.ndarray, tail_decay: float = 4.0):
+    """
+    Create empirical marginal transforms for a single source's data.
+
+    Parameters
+    ----------
+    chain_entry : ndarray
+        Data for one source, shape (n_samples, n_params)
+    uniform_lower_bound : ndarray
+        Global lower bounds for fallback transforms
+    uniform_upper_bound : ndarray
+        Global upper bounds for fallback transforms
+    tail_decay : float
+        Controls extrapolation decay rate in tails
+
+    Returns
+    -------
+    transform : Stack
+        Stacked empirical transforms for this source
+    inverse_log_det : callable
+        JIT-compiled inverse log determinant function
+    """
+    x = chain_entry[~np.isnan(chain_entry).any(axis=1)]
+    empirical_transforms = []
+
+    for j in range(x.shape[1]):
+        param_samples = x[:, j]
+        if len(param_samples) > 20:  # Need sufficient samples for empirical CDF
+            empirical_transforms.append(non_trainable(EmpiricalMarginalToGaussian(param_samples, tail_decay=tail_decay)))
+        else:
+            # Fallback to simple transform if insufficient samples
+            empirical_transforms.append(non_trainable(NormalToUniformInverseStandardize(
+                uniform_lower_bound[j], uniform_upper_bound[j], np.mean(param_samples), np.std(param_samples)
+            )))
+
+    transform = Stack(empirical_transforms)
+    inverse_log_det = jax.jit(jax.vmap(transform.inverse_and_log_det))
+
+    return transform, inverse_log_det
 
 
 def display_flows(chain: np.ndarray, flows, transforms, iteration: int = None):
@@ -286,7 +327,7 @@ def normalizing_flows_aux_distribution(sample: np.ndarray,
     return all_lp[source_indices]
 
 
-def relabel_normalizing_flows_with_plots(posterior_chain: PosteriorChain, normalizing_flows_fit, max_num_sources, num_iterations, eps):
+def relabel_normalizing_flows_with_plots(posterior_chain: PosteriorChain, normalizing_flows_fit, max_num_sources, num_iterations, eps, checkpoint_dir: Optional[str] = None):
     """Custom relabeling process that updates iteration numbers for plotting."""
     
 
@@ -301,7 +342,6 @@ def relabel_normalizing_flows_with_plots(posterior_chain: PosteriorChain, normal
     print(f"Sorting the posterior chain with flow plotting enabled:\n\tMaximum number of iterations: {num_iterations}\n\tMaximum number of source labels: {max_num_sources}\n")
 
     # Set up the compute cost matrix function
-    # Note: Removed filter_jit wrapper as it causes JAX compilation issues with flows
     compute_cost_matrix = create_compute_cost_matrix(normalizing_flows_aux_distribution)
 
     # Set up the for loop
@@ -326,6 +366,11 @@ def relabel_normalizing_flows_with_plots(posterior_chain: PosteriorChain, normal
         delta_cost_of_assignment = new_cost_of_assignment - old_cost_of_assignment
         print(f"Iteration {iteration + 1}: Difference in cost of assignment is {delta_cost_of_assignment} with total cost of {new_cost_of_assignment}.")
         print(f"\tProbabilities in model: {new_prob_in_model}")
+
+        # Save checkpoint if requested
+        if checkpoint_dir is not None:
+            from petra.relabel import _checkpoint_posterior_chain
+            _checkpoint_posterior_chain(new_posterior_chain, checkpoint_dir, iteration + 1)
 
         # break if converged
         if (delta_cost_of_assignment == 0):
@@ -379,22 +424,16 @@ def make_normalizing_flows_fit(chain:np.ndarray, max_num_sources: int, rng_seed:
     for i in range(max_num_sources):
         subkey_i = keys[i]
         chain_entry = chain[:, i, :]  # Get the i-th entry across all samples
-        x = chain_entry[~np.isnan(chain_entry).any(axis=1)]  # NaNs should have been removed already, but just in case!
-        # Use empirical marginal transforms for better marginal modeling
-        empirical_transforms = []
-        for j in range(x.shape[1]):
-            param_samples = x[:, j]
-            if len(param_samples) > 20:  # Need sufficient samples for empirical CDF
-                empirical_transforms.append(non_trainable(EmpiricalMarginalToGaussian(param_samples, tail_decay=tail_decay)))
-            else:
-                # Fallback to simple transform if insufficient samples
-                empirical_transforms.append(non_trainable(NormalToUniformInverseStandardize(
-                    uniform_lower_bound[j], uniform_upper_bound[j], np.mean(param_samples), np.std(param_samples)
-                )))
-        transform = Stack(empirical_transforms)
+        # Create initial transforms using the helper function
+        transform, inverse_log_det = _create_empirical_transforms_for_source(
+            chain_entry, uniform_lower_bound, uniform_upper_bound, tail_decay
+        )
         transforms.append(transform)
-        inverse_log_dets.append(jax.jit(jax.vmap(transform.inverse_and_log_det)))
-        if chain_entry.shape[0] <= threshold_samples:
+        inverse_log_dets.append(inverse_log_det)
+
+        # Clean data for flow creation
+        x = chain_entry[~np.isnan(chain_entry).any(axis=1)]
+        if x.shape[0] <= threshold_samples:
             flows.append(uniform_prior)
         else:
             # Compute adaptive flow parameters based on data characteristics
@@ -422,6 +461,10 @@ def make_normalizing_flows_fit(chain:np.ndarray, max_num_sources: int, rng_seed:
                 flows[i] = uniform_prior
 
             elif (flow is uniform_prior) and (chain_entry.shape[0] > threshold_samples):
+                # Transitioning from uniform to flow - update transforms with current data
+                transforms[i], inverse_log_dets[i] = _create_empirical_transforms_for_source(
+                    np.array(chain_entry), uniform_lower_bound, uniform_upper_bound, tail_decay
+                )
 
                 flow = masked_autoregressive_flow(
                     fit_keys[i],
@@ -433,6 +476,11 @@ def make_normalizing_flows_fit(chain:np.ndarray, max_num_sources: int, rng_seed:
                 flows[i] = flow
 
             else:
+                # Retraining existing flow - update transforms with current iteration's data
+                transforms[i], inverse_log_dets[i] = _create_empirical_transforms_for_source(
+                    np.array(chain_entry), uniform_lower_bound, uniform_upper_bound, tail_decay
+                )
+
                 flow = masked_autoregressive_flow(
                     fit_keys[i],
                     base_dist=Normal(jnp.zeros(chain_entry.shape[1])),
@@ -440,8 +488,6 @@ def make_normalizing_flows_fit(chain:np.ndarray, max_num_sources: int, rng_seed:
                     invert=True,
                 )
                 flow = fit_chain_entry(flow, transforms[i], inverse_log_dets[i], chain_entry, rng_seed=rng_seed+i)
-
-
                 flows[i] = flow
         if plot_flows:
             display_flows(chain, flows, transforms, iteration=None)
@@ -475,14 +521,15 @@ def make_normalizing_flows_fit(chain:np.ndarray, max_num_sources: int, rng_seed:
 def relabel_normalizing_flows(posterior_chain: PosteriorChain,
                               max_num_sources: int|None = None,
                               num_iterations: int = 20,
-                              eps=1e-2,
+                              eps=1e-6,
                               plot_flows: bool = False,
-                              tail_decay: float = 4.0):
+                              tail_decay: float = 4.0,
+                              checkpoint_dir: Optional[str] = None):
     normalizing_flows_fit = make_normalizing_flows_fit(posterior_chain.chain, max_num_sources, rng_seed = 999, threshold_samples = 100, tail_decay=tail_decay)
 
     if plot_flows:
         # Use a custom relabeling process that tracks iterations for plotting
-        return relabel_normalizing_flows_with_plots(posterior_chain, normalizing_flows_fit, max_num_sources, num_iterations, eps)
+        return relabel_normalizing_flows_with_plots(posterior_chain, normalizing_flows_fit, max_num_sources, num_iterations, eps, checkpoint_dir)
     else:
         # Use the standard relabeling process
         # Note: Removed filter_jit wrapper as it causes JAX compilation issues with flows
@@ -492,7 +539,8 @@ def relabel_normalizing_flows(posterior_chain: PosteriorChain,
         return relabel_samples(
             posterior_chain,
             max_num_sources=max_num_sources,
-            num_iterations=num_iterations
+            num_iterations=num_iterations,
+            checkpoint_dir=checkpoint_dir
         )
 
 
@@ -500,7 +548,9 @@ def make_catalog_copula_flows(posterior_chain: PosteriorChain,
                               max_num_sources: int,
                               num_iterations: int = 50,
                               plot_flows: bool = False,
-                              tail_decay: float = 4.0):
+                              tail_decay: float = 4.0,
+                              eps=1e-6,
+                              checkpoint_dir: Optional[str] = None):
     """
     Create a catalog using Gaussian copula marginal transforms + normalizing flows with smooth extrapolation.
 
@@ -523,9 +573,10 @@ def make_catalog_copula_flows(posterior_chain: PosteriorChain,
     tail_decay : float, default 4.0
         Controls extrapolation decay rate in tails. Higher values = slower decay (more conservative).
         Lower values = faster decay (more aggressive penalty for outliers).
-    compactness_weight : float, default 0.0
-        Weight for compactness penalty in flow training. Higher values encourage blob-like distributions.
-        Typical range: 0.0 (no penalty) to 1.0 (strong compactness preference).
+    eps : float, default 1e-6
+        Small value for numerical stability in probability computations.
+    checkpoint_dir : str, optional
+        Directory to save iteration checkpoints. If None, no checkpointing is performed.
 
     Returns
     -------
@@ -537,6 +588,9 @@ def make_catalog_copula_flows(posterior_chain: PosteriorChain,
     >>> from petra.flows import make_catalog_copula_flows
     >>> relabeled_chain = make_catalog_copula_flows(
     ...     posterior_chain, max_num_sources=3, plot_flows=True, tail_decay=2.0)
+    >>> # With checkpointing enabled
+    >>> relabeled_chain = make_catalog_copula_flows(
+    ...     posterior_chain, max_num_sources=3, checkpoint_dir="./my_checkpoints")
     """
 
     if posterior_chain.num_sources > max_num_sources:
@@ -554,6 +608,9 @@ def make_catalog_copula_flows(posterior_chain: PosteriorChain,
     relabeled_chain = relabel_normalizing_flows(initial_posterior_chain,
                                         max_num_sources=max_num_sources,
                                         num_iterations=num_iterations,
-                                        tail_decay=tail_decay)
+                                        plot_flows=plot_flows,
+                                        tail_decay=tail_decay,
+                                        eps=eps,
+                                        checkpoint_dir=checkpoint_dir)
 
     return relabeled_chain
