@@ -9,49 +9,118 @@ from jax.scipy.special import erf, erfinv
 import jax
 
 
-def make_empirical_cdf_spline(x_grid, samples):
+def make_empirical_cdf_spline(x_grid, samples, tail_scale=None, min_eps=1e-7):
+    """
+    Create empirical CDF and PDF splines with smooth extrapolation.
+
+    IMPROVED VERSION: Uses smooth exponential extrapolation instead of hard boundaries
+    to preserve natural likelihood ordering for out-of-support samples.
+
+    Parameters
+    ----------
+    x_grid : array_like
+        Grid points for CDF evaluation
+    samples : array_like
+        Training data samples
+    tail_scale : float, optional
+        Controls extrapolation decay rate. If None, computed adaptively.
+    min_eps : float
+        Minimum probability to prevent numerical issues
+    """
     # 1. Sort the grid
     x_grid = np.asarray(x_grid)
     sort_idx = np.argsort(x_grid)
-    xg       = x_grid[sort_idx]
+    xg = x_grid[sort_idx]
 
-    # 2. Empirical CDF/
+    # 2. Empirical CDF
     sorted_chain = process_array(samples)
-    counts       = np.searchsorted(sorted_chain, xg, side='right')
-    cdf_vals     = counts / len(sorted_chain)
+    counts = np.searchsorted(sorted_chain, xg, side='right')
+    cdf_vals = counts / len(sorted_chain)
 
-    # 3. Monotonic spline, no extrapolation
+    # 3. Data bounds and adaptive tail scale
+    data_min, data_max = np.min(samples), np.max(samples)
+
+    if tail_scale is None:
+        # Adaptive tail scale based on data characteristics
+        q25, q75 = np.percentile(samples, [25, 75])
+        iqr = q75 - q25
+        data_range = data_max - data_min
+        tail_scale = max(iqr / 4, data_range / 10, 0.1)  # Ensure minimum scale
+
+    # 4. Create monotonic spline for interior region
     try:
-        # check for duplicate values and perturb them if there are any:
-
         cs = PchipInterpolator(xg, cdf_vals, extrapolate=False, check=False)
-    except ValueError:
-        plt.plot(xg, cdf_vals)
-        plt.show()
+    except ValueError as e:
+        # Fallback to simple linear interpolation
+        from scipy.interpolate import interp1d
+        cs = interp1d(xg, cdf_vals, kind='linear', bounds_error=False, fill_value=(0, 1))
 
-    # 4. Safe wrapper for true CDF
+    # 5. Smooth CDF function with exponential extrapolation
     def cdf_fn(u):
-        y = cs(u)
-        y = np.where(u < xg[0], 0.0, y)
-        y = np.where(u > xg[-1], 1.0, y)
+        u = np.asarray(u)
+        y = np.zeros_like(u, dtype=float)
+
+        # Masks for different regions
+        below_mask = u < data_min
+        above_mask = u > data_max
+        inside_mask = ~(below_mask | above_mask)
+
+        # Smooth extrapolation below minimum
+        if np.any(below_mask):
+            distances = data_min - u[below_mask]
+            y[below_mask] = min_eps * np.exp(-distances / tail_scale)
+
+        # Smooth extrapolation above maximum
+        if np.any(above_mask):
+            distances = u[above_mask] - data_max
+            y[above_mask] = 1.0 - min_eps * np.exp(-distances / tail_scale)
+
+        # Interior: use spline
+        if np.any(inside_mask):
+            y[inside_mask] = cs(u[inside_mask])
+            # Handle any NaNs from spline
+            nan_mask = np.isnan(y[inside_mask])
+            if np.any(nan_mask):
+                # Fallback to linear interpolation
+                y[inside_mask][nan_mask] = np.interp(
+                    u[inside_mask][nan_mask], xg, cdf_vals
+                )
+
+        # Final bounds check
+        y = np.clip(y, min_eps, 1.0 - min_eps)
         return y
 
-    # 5. PDF spline
-    pdf_spline = cs.derivative()
-
+    # 6. Smooth PDF function
     def pdf_fn(u):
-        y = pdf_spline(u)
-        y = np.where(u < xg[0], 1e-20, y)
-        y = np.where(u > xg[-1], 1e-20, y)
+        u = np.asarray(u)
+        y = np.zeros_like(u, dtype=float)
+
+        # Masks for different regions
+        below_mask = u < data_min
+        above_mask = u > data_max
+        inside_mask = ~(below_mask | above_mask)
+
+        # Analytical derivatives in tails (from exponential extrapolation)
+        if np.any(below_mask):
+            distances = data_min - u[below_mask]
+            y[below_mask] = (min_eps / tail_scale) * np.exp(-distances / tail_scale)
+
+        if np.any(above_mask):
+            distances = u[above_mask] - data_max
+            y[above_mask] = (min_eps / tail_scale) * np.exp(-distances / tail_scale)
+
+        # Interior: finite difference approximation
+        if np.any(inside_mask):
+            eps_fd = min(1e-6, tail_scale / 1000)  # Adaptive step size
+            cdf_plus = cdf_fn(u[inside_mask] + eps_fd)
+            cdf_minus = cdf_fn(u[inside_mask] - eps_fd)
+            y[inside_mask] = (cdf_plus - cdf_minus) / (2 * eps_fd)
+
+        # Ensure positive and bounded
+        y = np.maximum(y, min_eps)
         return y
 
-    # Return raw CDF values (in the same order as x_grid),
-    # the safe CDF function, and the PDF spline
-    return (
-        cdf_vals[np.argsort(sort_idx)],  # back in original x_grid order
-        cdf_fn,
-        pdf_fn
-    )
+    return cdf_vals[np.argsort(sort_idx)], cdf_fn, pdf_fn
 
 class EmpiricalMarginalToGaussian(AbstractBijection):
     """
