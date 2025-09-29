@@ -346,13 +346,10 @@ def relabel_normalizing_flows_with_plots(posterior_chain: PosteriorChain, normal
 
     # Set up the for loop
     old_posterior_chain = posterior_chain
-    normalizing_flows_fit.set_iteration(0)  # Initial state
     old_parametric_fit, old_prob_in_model = update_parametric_fit_and_prob_in_model(posterior_chain, max_num_sources, normalizing_flows_fit, eps=eps)
     old_cost_of_assignment = 0
 
     for iteration in range(num_iterations):
-        # Update iteration number for plotting
-        normalizing_flows_fit.set_iteration(iteration + 1)
 
         # get the new values
         print("relabeling samples...")
