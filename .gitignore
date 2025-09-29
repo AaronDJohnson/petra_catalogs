@@ -162,3 +162,4 @@ cython_debug/
 example_notebooks/two_sinusoid/
 .DS_Store
 test.ipynb
+/example_notebooks/data/run_without_noise_2bins
