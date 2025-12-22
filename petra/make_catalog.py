@@ -111,7 +111,8 @@ def make_catalog_mv_normal(posterior_chain: PosteriorChain,
     """
 
     # shuffle the entries
-    posterior_chain = posterior_chain.randomize_entries(shuffle_seed)  # works with a copy of the chain
+    if shuffle_seed is not None:
+        posterior_chain = posterior_chain.randomize_entries(shuffle_seed)  # works with a copy of the chain
 
     if posterior_chain.num_sources > max_num_sources:
         raise ValueError("max_num_sources must be greater than the number of entries in the chain.")
