@@ -217,6 +217,7 @@ class PosteriorChain:
         df['num_sources'] = self.chain.shape[1]
         df['num_params_per_source'] = self.chain.shape[2]
         df['transdimensional'] = int(self.trans_dimensional)
+        df['prob_in_model'] = np.pad(self.prob_in_model, (0, df.shape[0] - len(self.prob_in_model)), constant_values=np.nan)
         df.to_feather(feather_filepath)
 
     @staticmethod
@@ -248,8 +249,13 @@ class PosteriorChain:
         num_sources = df['num_sources'][0]
         num_params_per_source = df['num_params_per_source'][0]
         transdimensional = bool(df['transdimensional'][0])
+        prob_in_model = df['prob_in_model'][~np.isnan(df['prob_in_model'])].to_numpy()
         # remove these three parameters from the DataFrame
-        df.drop(columns=['num_sources', 'num_params_per_source', 'transdimensional'], inplace=True)
+        df.drop(columns=['num_sources', 'num_params_per_source', 'transdimensional', 'prob_in_model'], inplace=True)
+
         # reshape the DataFrame to the original shape
         chain = df.values.reshape(-1, num_sources, num_params_per_source)
-        return PosteriorChain(chain, num_sources, num_params_per_source, transdimensional)
+        posterior_chain = PosteriorChain(chain, num_sources, num_params_per_source, transdimensional)
+        posterior_chain.prob_in_model = prob_in_model
+
+        return posterior_chain
