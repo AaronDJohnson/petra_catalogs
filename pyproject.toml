@@ -1,25 +1,210 @@
-[tool.poetry]
+[project]
 name = "petra-catalogs"
-version = "1.0.0"
+version = "1.1.0"
 description = "From LISA global fit to catalogs"
-authors = ["Aaron D. Johnson", "Javier Roulete", "Katerina Chatziioannou", "Michele Vallisneri", "Kyle Gersbach", "Chris Trejo"]
 readme = "README.md"
-packages = [{include = "petra"}]
+requires-python = ">=3.11,<4"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Aaron D. Johnson", email = "aaron9035@gmail.com" },
+    { name = "Javier Roulete" },
+    { name = "Katerina Chatziioannou" },
+    { name = "Michele Vallisneri" },
+    { name = "Kyle Gersbach" },
+    { name = "Chris Trejo" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-numpy = "^2.2.3"
-scipy = "^1.15.2"
-pandas = "^2.2.3"
+dependencies = [
+    # Core numerics / IO. Required by petra.utils, petra.posterior_chain,
+    # petra.samples_io, petra.parametric_fits, petra.cost_matrix, petra.relabel.
+    "numpy>=2.2.3,<3",
+    "scipy>=1.15.2,<2",
+    "pandas>=2.2.3,<3",
+    # PosteriorChain.to_feather / .read_feather go through pandas' Feather
+    # backend, which is pyarrow.
+    # Arrow 22+ provides Python 3.14 wheels; retain older compatible releases
+    # for existing environments while allowing the current stable series.
+    "pyarrow>=21.0.0,<26",
+    # Progress bars in petra.relabel and petra.bayesian_gaussian.
+    "tqdm>=4.67.1,<5",
 
-[tool.poetry.group.dev]
-optional = true
+    # Coppuccino-backed normalizing flows and petra.flow_utils.
+    # Coppuccino declares its own FlowJAX, Equinox and Paramax dependencies.
+    # petra.utils imports jax only function-locally, so the pure-numpy entry
+    # points -- and `import petra` itself -- do not pay the jax import cost.
+    "jax>=0.7.2,<0.8",
+    # Pinned to the published release. petra used to pass
+    # normalizing_flows_fit(..., show_progress=...), which exists only in the
+    # unreleased 2.0.0 line; it now silences that bar via
+    # petra.flow_utils.quiet_external_fit instead, so 1.0.0 is sufficient and the
+    # package installs from PyPI unaided.
+    "coppuccino>=1.0.0,<2",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
-sphinx = "^8.2.3"
-flake8 = "^7.2.0"
+[project.optional-dependencies]
+# matplotlib supports the example and notebook plots; the catalog entry points
+# all import and run without it. Use `uv sync --extra plots`, or
+# `pip install petra-catalogs[plots]`, to run the plotting examples.
+plots = ["matplotlib>=3.10.0,<4"]
+
+[project.urls]
+Homepage = "https://github.com/AaronDJohnson/petra_catalogs"
+Repository = "https://github.com/AaronDJohnson/petra_catalogs"
+
+# PEP 735 dependency group. Unlike an extra, this is never published as part of
+# the distribution -- it exists only for working on petra itself, and `uv sync`
+# installs it by default.
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4,<9",
+    # Measures branch coverage ([tool.coverage.run]) and enforces the
+    # --cov-fail-under gate, which is passed by the `tests` job in
+    # .github/workflows/github-actions.yml rather than by addopts -- see the
+    # comment on addopts for why.
+    "pytest-cov>=7.0,<8",
+    "sphinx>=8.2.3,<9",
+    "flake8>=7.2.0,<8",
+    # Upper bounds keep a future major release from changing a BLOCKING gate
+    # without someone regenerating the lock. Bounded above the versions that
+    # actually validated the current zero-finding state (ruff 0.16, mypy 2.3),
+    # never below them.
+    "ruff>=0.9,<0.17",
+    "mypy>=1.14,<3",
+    # Notebook gates. flake8 cannot parse .ipynb, so nbqa converts each notebook
+    # to a temporary .py and runs flake8 on that
+    # (.github/scripts/lint_notebooks.sh); nbconvert + ipykernel are what
+    # actually execute a notebook end to end in the `notebooks` job. Same reason
+    # for the upper bounds as ruff/mypy above: all three gate CI, and a major
+    # release must not change a gate's result without someone relocking.
+    "nbqa>=1.9,<2",
+    "nbconvert>=7.16,<8",
+    "ipykernel>=6.29,<7",
+]
+
+[tool.uv]
+# Always use a uv-managed CPython, never whatever interpreter happens to be on
+# PATH. Without this uv will happily adopt an ambient conda base interpreter,
+# which is how this project used to be developed -- and that particular one ships
+# a broken `_sqlite3` extension, so `pytest` cannot even start under it. Managed
+# interpreters are downloaded on demand and pinned by .python-version.
+python-preference = "only-managed"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["petra"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/petra", "/tests", "/README.md", "/LICENSE"]
+
+[tool.pytest.ini_options]
+# petra/ is a testpath too: every in-docstring example is executed as a test,
+# so a docstring that drifts from the code it documents fails the build.
+testpaths = ["tests", "petra"]
+# --cov-fail-under is deliberately NOT here. addopts applies to EVERY
+# invocation, including ones that were never meant to cover everything:
+# `pytest -k <subset>` measures only what the subset touched and exits 1, and
+# `pytest --collect-only` -- which runs no test at all -- still prints
+# "FAIL Required test coverage ... not reached" against the fraction that merely
+# importing the package reaches. Both are false alarms: nothing is under-tested,
+# the run simply was not a full one, and pytest-cov cannot tell a narrowed run
+# from a complete one. So the gate is attached to the invocation that IS a full
+# run -- the `tests` job in .github/workflows/github-actions.yml, the ONLY place
+# it is enforced.
+#
+# The cost of that trade, stated plainly: a bare local `pytest` is UNGATED. Any
+# new thing that runs the whole suite -- another job, a pre-commit hook, a
+# Makefile target -- must pass --cov-fail-under itself or it is not gated.
+#
+# term-missing rather than term: with branch = true the Missing column is where
+# untaken arms show up (as `779->799`), and that list is the work queue for
+# raising the gate. Plain `term` reports a BrPart count without ever saying
+# which branches.
+addopts = "-ra --doctest-modules --cov=petra --cov-report=term-missing"
+
+# Coverage settings live here rather than in addopts so that a bare
+# `coverage run` / `coverage report` -- what you reach for when working out
+# which test covers what -- measures the same thing the suite does.
+[tool.coverage.run]
+# BRANCH coverage, not line coverage. Without this an `if cond:` whose false
+# arm no test ever takes still counts as fully covered, so the headline number
+# was silent about exactly what a test suite exists to exercise -- a package can
+# sit at 99% of lines with dozens of untaken arms behind it.
+#
+# Turning it on both lowers the number and gives it meaning: every branch exit
+# joins the denominator, and the arms nothing takes surface as BrPart, itemised
+# in the Missing column. No count is quoted here on purpose -- run the suite,
+# read the total. Transcribed figures rot within days on a moving tree, which is
+# what happened to the annotation counts that used to sit under [tool.mypy].
+branch = true
+
+[tool.coverage.report]
+# coverage's should_fail_under() compares round(total, precision) against the
+# gate, so at the default precision of 0 a real 97.6% rounds to 98 and clears a
+# --cov-fail-under=98. Two digits makes the gate mean the number it prints.
+precision = 2
+# fail_under is deliberately NOT set here either: pytest-cov reads it out of
+# this section whenever --cov-fail-under is absent, so setting it would be
+# exactly equivalent to putting the gate back in addopts, false alarms and all.
+
+[tool.ruff]
+# Mirrors .flake8: E501 is not enforced (see `ignore` below), but the
+# formatter still targets 120 columns for newly written code.
+line-length = 120
+target-version = "py311"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "docs/_build",
+    # example_notebooks stays excluded HERE even though .flake8 no longer
+    # excludes it: ruff reads .ipynb natively, so dropping this line would give
+    # the notebooks a second lint gate with a second set of waivers, and two
+    # waiver lists for one tree drift apart. flake8-through-nbqa owns the
+    # notebooks (.github/scripts/lint_notebooks.sh) and is what blocks CI.
+    "example_notebooks",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F"]
+# E501 (line too long) is ignored to match .flake8's extend-ignore, so the
+# existing long lines do not have to be reflowed in one sweep.
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["petra"]
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# petra/ is 100% annotated: every def, every parameter, every return. These two
+# settings are what MAKE that true rather than a claim about it --
+# disallow_untyped_defs turns a missing parameter or return annotation into a
+# mypy error, so an unannotated def added later fails this gate instead of being
+# silently skipped.
+#
+# This used to quote the counts instead -- "134/134 functions, 524/524
+# parameters, 134/134 returns". Do not put them back. The denominator is just
+# how many defs happen to exist today, so the line is wrong the moment anyone
+# adds one: that same tree measured 134/524/134, then 148/523/148, then
+# 151/532/151 within a single change set. The ratio is the invariant, it is
+# 100%, and `uv run mypy` is what checks it -- which a comment never could.
+disallow_untyped_defs = true
+check_untyped_defs = true

@@ -1,0 +1,38 @@
+exclude: '^(docs/_build/|dist/|example_notebooks/)'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2000]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.7
+    hooks:
+      # Lint. Non-blocking cosmetics are configured away in
+      # [tool.ruff.lint] in pyproject.toml. Currently passes clean.
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      # `ruff-format` is deliberately NOT enabled. It would rewrite 30 files
+      # (~2100 lines) the first time it runs, which would bury every real change
+      # in the next few PRs. Adopting a formatter is worth doing, but as its own
+      # commit that touches nothing else:
+      #     uv run ruff format .
+      # then add `- id: ruff-format` here so it stays formatted.
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.3.0
+    hooks:
+      # Hard gate only: F (undefined names, unused imports) and E9 (syntax
+      # errors). This is the same gate CI enforces; the cosmetic pass is
+      # advisory and does not run here.
+      - id: flake8
+        name: "flake8 (hard gate: F,E9)"
+        args: [--select=F,E9]
+        files: ^(petra|tests)/.*\.py$

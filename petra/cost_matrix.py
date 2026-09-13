@@ -1,9 +1,43 @@
+"""
+Build the per-sample assignment matrix that drives relabeling.
+
+Third of the four stages (:mod:`~petra.parametric_fits` ->
+:mod:`~petra.aux_distributions` -> :mod:`~petra.cost_matrix` ->
+:mod:`~petra.relabel`).  Given one posterior sample and the auxiliary
+distributions fitted to the current labeling, this module scores every
+(label, slot) pairing; :mod:`petra.relabel` then hands the result to
+``scipy.optimize.linear_sum_assignment``.
+
+Conventions
+-----------
+* The matrix has shape ``(num_distributions, n_sources)`` and is indexed
+  ``[label, slot]``: **rows are labels** (fitted distributions), **columns are
+  slots** (positions in the sample).  Getting that orientation wrong is not
+  loud -- it produces a plausible matrix with the spike term applied along the
+  wrong axis.
+* Entries are **rewards, not costs**, despite the name: entry ``(i, j)`` is
+  ``log(p_i) + log f_i(x_j)``, the log joint probability that label *i* is in
+  the model *and* generated the data in slot *j*.  The assignment is therefore
+  **maximized**, and larger is better throughout.
+* The model is spike-and-slab.  A slot where the source is absent is detected
+  from the original sample and its entry is replaced by ``log(1 - p_i)``: the
+  probability that label *i* is out of the model, which is the correct
+  alternative hypothesis for a missing source.  It depends on the *row* (the
+  label), never on the column, precisely so that the column does not become
+  row-constant -- a row-constant column drops out of the assignment objective
+  entirely and the spike half of the model would be inert.
+* ``num_distributions`` need not equal ``n_sources``; the matrix is rectangular
+  whenever the catalog has more slots than fitted labels.
+"""
+
 import numpy as np
 from typing import Callable, List
 from functools import partial
 
+from petra.utils import source_present
 
-def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int|None = None) -> Callable:
+
+def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int | None = None) -> Callable:
     """
     Create a cost-matrix computation function for a given auxiliary distribution.
 
@@ -75,7 +109,11 @@ def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int
         # Precompute logarithms.
         with np.errstate(divide='ignore'):  # avoid divide by zero warnings, they are expected when we don't clip prob_in_model
             log_prob = np.log(prob_in_model)  # shape: (num_distributions,)
-            log_prob_not = np.log1p(-prob_in_model)[np.newaxis, :]  # shape: (1, num_distributions)
+            # Indexed by distribution, i.e. along the ROW axis, to match `log_prob` below.
+            # Broadcasting it along the column axis instead would fill an absent slot with
+            # log(1 - p_j) of the *slot* rather than log(1 - p_i) of the *label*, which makes
+            # the column row-constant and drops it out of the assignment objective entirely.
+            log_prob_not = np.log1p(-prob_in_model)[:, np.newaxis]  # shape: (num_distributions, 1)
 
         # Vectorize over distribution indices.
         distribution_indices = np.arange(num_distributions)
@@ -83,8 +121,13 @@ def create_compute_cost_matrix(aux_distribution: Callable, single_parameter: int
         cost_matrix = aux_distribution(sample, aux_parameters, distribution_indices)
         cost_matrix = log_prob[:, np.newaxis] + cost_matrix
 
-        # Replace any NaN values with log(1 - prob_in_model)
-        cost_matrix = np.where(np.isnan(cost_matrix), log_prob_not, cost_matrix)
+        # Absence is a property of the original sample, not of the evaluated
+        # density.  Flow evaluators deliberately replace non-finite outputs by
+        # a finite floor, so looking for NaNs here would lose the missing-source
+        # sentinel.  Conversely, a present point whose flow returns NaN should
+        # keep that finite floor rather than be mistaken for an absent source.
+        present_slots = source_present(sample)[np.newaxis, :]
+        cost_matrix = np.where(present_slots, cost_matrix, log_prob_not)
 
         return cost_matrix
 

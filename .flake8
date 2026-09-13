@@ -1,2 +1,13 @@
 [flake8]
-ignore = E501
+extend-ignore = E501
+max-line-length = 120
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .ipynb_checkpoints,
+    build,
+    dist,
+    docs/_build,
+    .venv,
+    venv

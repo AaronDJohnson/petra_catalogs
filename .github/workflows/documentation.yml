@@ -1,8 +1,12 @@
-name: documentation
+name: Documentation
 
 on:
-  release: 
-    types: [ published ]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -11,19 +15,21 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-      - name: Install dependencies
-        run: |
-          pip install sphinx sphinx_rtd_theme myst_parser
-      - name: Sphinx build
-        run: |
-          sphinx-build doc _build
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: "0.12.13"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Build documentation with warnings as errors
+        run: uv run sphinx-build -W -b html docs docs/_build/html
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: >-
+          github.event_name == 'release' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           publish_branch: gh-pages
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: _build/
+          publish_dir: docs/_build/html
           force_orphan: true

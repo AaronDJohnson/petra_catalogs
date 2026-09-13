@@ -2,90 +2,171 @@ name: CI targets
 
 on:
   push:
-    branches: [ master ]
+    branches: [main]
   pull_request:
-    branches: [ master ]
-  release: 
-    types: [ published ]
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  UV_VERSION: "0.12.13"
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked --only-group dev
+      - name: Python syntax and names
+        run: uv run --no-sync flake8 --select=F,E9 petra/ tests/ examples/
+      - name: Notebook syntax and names
+        run: uv run --no-sync bash .github/scripts/lint_notebooks.sh
+
+  lint-cosmetic:
+    name: Cosmetic lint (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked --only-group dev
+      - run: uv run --no-sync flake8 .
+      - run: uv run --no-sync ruff check .
+
   tests:
     runs-on: ${{ matrix.os }}
+    env:
+      # Keep uv run on the interpreter selected by the matrix instead of
+      # recreating the environment from the development .python-version pin.
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, macos-latest]
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies and package
-      run: |
-        pip install --upgrade pip setuptools wheel
-        pip install pytest flake8
-        pip install -e .
-    - name: Display installed packages
-      run: |
-        python -m pip list
-    - name: Run lint
-      run:  flake8 .
-    - name: Test with pytest
-      run: pytest -v tests
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra plots --python ${{ matrix.python-version }}
+      - name: Package import
+        run: |
+          uv run python - <<'PY'
+          import os
+          import sys
+          import petra
+
+          actual = f"{sys.version_info.major}.{sys.version_info.minor}"
+          expected = os.environ["UV_PYTHON"]
+          assert actual == expected, (actual, expected)
+          print(sys.version, petra.__version__)
+          PY
+      - name: Unit tests, doctests, and branch coverage
+        run: uv run pytest -v --cov-fail-under=98
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked --extra plots
+      - run: uv run mypy
+
+  examples:
+    name: Coppuccino Python example
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked --extra plots
+      - run: uv run python examples/simple_flows_example.py
+
+  notebooks:
+    name: Maintained notebooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked --extra plots
+      - name: Resolve notebook imports
+        run: uv run python .github/scripts/check_notebook_imports.py
+      - name: Execute maintained notebooks in a temporary directory
+        run: |
+          for notebook in \
+            example_notebooks/toy_problem.ipynb \
+            example_notebooks/toy_problem_flows.ipynb \
+            example_notebooks/lisa_example.ipynb
+          do
+            uv run jupyter nbconvert --to notebook --execute \
+              --ExecutePreprocessor.kernel_name=python3 \
+              --ExecutePreprocessor.timeout=120 \
+              --output-dir "${{ runner.temp }}" \
+              "$notebook"
+          done
+      - name: Notebook execution leaves the checkout clean
+        run: git diff --exit-code && test -z "$(git status --porcelain)"
 
   build:
-    needs: [tests]
-    name: Build source distribution
+    needs: [lint, tests, typecheck, examples, notebooks]
+    name: Build distributions
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
-    - name: Build
-      run: |
-        pip install --upgrade pip setuptools wheel
-        python setup.py sdist
-    - name: Test the sdist
-      run: |
-        python -m pip install --upgrade pip setuptools wheel pytest
-        pip install dist/*.tar.gz
-        python -c "import petra; print(petra.__version__)"
-        pytest -v tests
-    - uses: actions/upload-artifact@v4
-      with:
-        name: dist
-        path: dist/*
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv build
+      - name: Test wheel import
+        run: >-
+          uv run --no-project --no-sources
+          --with "$(echo dist/*.whl)[plots]"
+          python -I -c "import petra; [getattr(petra, name) for name in petra.__all__]; print(petra.__version__)"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dist
+          path: dist/*
 
   deploy:
     needs: [tests, build]
     runs-on: ubuntu-latest
     environment: deploy
     permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
     if: github.event_name == 'release'
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install setuptools wheel twine
-    - name: Download wheel/dist from build
-      uses: actions/download-artifact@v4
-      with:
-        name: dist
-        path: dist
-    - name: Build and publish
-      uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: dist
+          path: dist
+      - run: uv publish --trusted-publishing always
