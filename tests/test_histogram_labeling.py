@@ -61,6 +61,25 @@ def test_count_and_sort_by_sample_count():
     assert counts == [9, 5, 2]   # descending
 
 
+def test_sample_count_ties_keep_reverse_slot_order_and_complete_source_vectors():
+    # Include enough populated and empty slots to expose unstable tie ordering.
+    chain = np.full((2, 32, 2), np.nan)
+    for source_index, count in enumerate([2, 1, 0, 2] * 8):
+        chain[:count, source_index, :] = [source_index + 1, 100 + source_index]
+    original = chain.copy()
+
+    sorted_chain = sort_array_by_sample_count(chain, relabeling_parameter=0)
+
+    # Decreasing population, then decreasing original slot index within ties.
+    expected_slots = [
+        31, 28, 27, 24, 23, 20, 19, 16, 15, 12, 11, 8, 7, 4, 3, 0,
+        29, 25, 21, 17, 13, 9, 5, 1,
+        30, 26, 22, 18, 14, 10, 6, 2,
+    ]
+    np.testing.assert_array_equal(sorted_chain, original[:, expected_slots, :])
+    np.testing.assert_array_equal(chain, original)
+
+
 def test_label_chain_by_histogram_separates_two_frequencies():
     """Two well-resolved frequencies end up one per slot, however they arrived."""
     rng = np.random.default_rng(0)

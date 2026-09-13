@@ -38,4 +38,3 @@ napoleon_numpy_docstring = True
 napoleon_use_ivar = True
 
 html_theme = "alabaster"
-html_static_path = ["_static"]

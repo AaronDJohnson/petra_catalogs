@@ -69,7 +69,7 @@ Repository = "https://github.com/AaronDJohnson/petra_catalogs"
 # installs it by default.
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4,<9",
+    "pytest>=9.0.3,<10",
     # Measures branch coverage ([tool.coverage.run]) and enforces the
     # --cov-fail-under gate, which is passed by the `tests` job in
     # .github/workflows/github-actions.yml rather than by addopts -- see the

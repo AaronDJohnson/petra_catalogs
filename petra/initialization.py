@@ -202,7 +202,7 @@ def sort_array_by_sample_count(sources_array: np.ndarray, relabeling_parameter: 
     source_sample_counts = []
     for source_index in range(sources_array.shape[1]):
         source_sample_counts.append(count_nonnan_samples(sources_array, source_index, relabeling_parameter))
-    sorted_source_indices = np.argsort(source_sample_counts)[::-1]  # descending order
+    sorted_source_indices = np.argsort(source_sample_counts, kind="stable")[::-1]  # descending order
 
     sources_array_sorted = np.zeros_like(sources_array)
     for new_index, old_index in enumerate(sorted_source_indices):
