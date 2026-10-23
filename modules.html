@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>petra-catalogs API &#8212; petra_catalogs  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="petra-catalogs documentation" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="petra-catalogs-api">
+<h1>petra-catalogs API<a class="headerlink" href="#petra-catalogs-api" title="Link to this heading">¶</a></h1>
+<section id="module-petra">
+<span id="public-package"></span><h2>Public package<a class="headerlink" href="#module-petra" title="Link to this heading">¶</a></h2>
+<p>petra: from the LISA global fit to catalogs of single sources.</p>
+<p>The public entry points are the two <code class="docutils literal notranslate"><span class="pre">make_catalog_*</span></code> relabelers, <code class="xref py py-func docutils literal notranslate"><span class="pre">load_samples()</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">PosteriorChain</span></code>.
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">petra</span></code> is cheap: the entry points are resolved on first access (PEP 562), so jax is not imported until a
+flow method is used. The package is typed (<code class="docutils literal notranslate"><span class="pre">py.typed</span></code>), and the lazy names are also imported under
+<code class="docutils literal notranslate"><span class="pre">TYPE_CHECKING</span></code> so a type checker sees their real signatures.
+A chain is <code class="docutils literal notranslate"><span class="pre">(n_samples,</span> <span class="pre">n_sources,</span> <span class="pre">n_params_per_source)</span></code> and an all-NaN source row means the source is absent.
+Nothing prints: diagnostics go to the <code class="docutils literal notranslate"><span class="pre">petra</span></code> logger, and <code class="docutils literal notranslate"><span class="pre">progress=False</span></code> silences every progress bar.</p>
+</section>
+<section id="module-petra.make_catalog">
+<span id="catalog-entry-points"></span><h2>Catalog entry points<a class="headerlink" href="#module-petra.make_catalog" title="Link to this heading">¶</a></h2>
+<p>The multivariate-normal catalog method: <cite>relabel_mv_normal</cite> and the entry point <cite>make_catalog_mv_normal</cite>.</p>
+<p>Every <code class="docutils literal notranslate"><span class="pre">make_catalog_*</span></code> entry point takes <code class="docutils literal notranslate"><span class="pre">(posterior_chain,</span> <span class="pre">max_num_sources,</span> <span class="pre">*,</span> <span class="pre">...)</span></code> with the shared keywords
+<code class="docutils literal notranslate"><span class="pre">num_iterations</span></code>, <code class="docutils literal notranslate"><span class="pre">initialization_param_index</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffle_seed</span></code>, <code class="docutils literal notranslate"><span class="pre">rng_seed</span></code>, <code class="docutils literal notranslate"><span class="pre">checkpoint_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">resume_from</span></code>,
+<code class="docutils literal notranslate"><span class="pre">progress</span></code> and <code class="docutils literal notranslate"><span class="pre">eps</span></code>, checks its arguments before any work, never modifies its input and returns a new chain.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.make_catalog.make_catalog_mv_normal">
+<span class="sig-prename descclassname"><span class="pre">petra.make_catalog.</span></span><span class="sig-name descname"><span class="pre">make_catalog_mv_normal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initialization_param_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_checkpoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_moves</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_exclusive</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_starts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.make_catalog.make_catalog_mv_normal" title="Link to this definition">¶</a></dt>
+<dd><p>Build a catalog: widen, shuffle, warm-start with a univariate pass, then relabel with multivariate normals.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain to catalog, holding at least one sample; never modified.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of labels in the catalog, at least the chain’s num_sources.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – ceiling on the multivariate iterations, counting split-move evaluations and resumed ones.</p></li>
+<li><p><strong>init_num_iterations</strong> (<em>int</em>) – ceiling on the univariate warm start’s iterations; checked even when it is skipped.</p></li>
+<li><p><strong>initialization_param_index</strong> (<em>int</em><em> | </em><em>None</em>) – parameter of the univariate warm start, or None to skip it.</p></li>
+<li><p><strong>shuffle_seed</strong> (<em>int</em><em> | </em><em>None</em>) – None for no shuffle, else a non-negative integer; the chain is widened before it is shuffled.</p></li>
+<li><p><strong>rng_seed</strong> (<em>int</em>) – accepted for symmetry with the other entry points and unused.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – directory to save the best labeling to each time it improves; created and checked first.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – checkpoint file or directory to resume from, without shuffling, widening or initializing again.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples of each iteration.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound on prob_in_model inside the cost matrix; costs under different values are not comparable.</p></li>
+<li><p><strong>keep_checkpoints</strong> (<em>int</em><em> | </em><em>None</em>) – keep only this many of the newest checkpoints; None keeps them all.</p></li>
+<li><p><strong>split_moves</strong> (<em>bool</em>) – where the search would stop, try splitting a label that holds two clusters of rows.</p></li>
+<li><p><strong>split_exclusive</strong> (<em>bool</em>) – with split_moves, also split a label whose two clusters rarely appear in the same sample.</p></li>
+<li><p><strong>num_starts</strong> (<em>int</em>) – independent starts, start k shuffled with <code class="docutils literal notranslate"><span class="pre">shuffle_seed</span> <span class="pre">+</span> <span class="pre">k</span></code> (or k, start 0 unshuffled).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The strictly cheapest start’s catalog of max_num_sources labels, with unclipped prob_in_model;
+<code class="docutils literal notranslate"><span class="pre">cost_dict[max_num_sources]</span></code> is its labeling’s cost under the fit before it.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – posterior_chain is not a PosteriorChain, or shuffle_seed is not None or an integer.</p></li>
+<li><p><strong>ValueError</strong> – a count, eps, max_num_sources, shuffle_seed, initialization_param_index or the checkpoint is
+    invalid, or num_starts &gt; 1 is combined with checkpoint_dir or resume_from.</p></li>
+<li><p><strong>OSError</strong> – checkpoint_dir cannot be created or written to.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>UserWarning</strong> – a label that widening added ends empty; with split_moves, the budget ran out before the search
+stopped; a resume has nothing left to run.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.make_catalog.relabel_mv_normal">
+<span class="sig-prename descclassname"><span class="pre">petra.make_catalog.</span></span><span class="sig-name descname"><span class="pre">relabel_mv_normal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_checkpoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_moves</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_exclusive</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.make_catalog.relabel_mv_normal" title="Link to this definition">¶</a></dt>
+<dd><p>Relabel a chain with a multivariate normal fit per label, with split moves where the search would stop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain to relabel; not modified. On a resume, the chain the run started from.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em><em> | </em><em>None</em>) – number of source slots; None uses the chain’s num_sources.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – ceiling on the iterations, counting split-move evaluations and resumed ones.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound on prob_in_model inside the cost matrix; the returned prob_in_model is unclipped.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – directory to save the best labeling to each time it improves; one directory per run.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – checkpoint file or directory to resume from; it must come from the same chain, width and eps.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples of each iteration.</p></li>
+<li><p><strong>run_info</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – informational settings recorded in every checkpoint and not compared on resume.</p></li>
+<li><p><strong>keep_checkpoints</strong> (<em>int</em><em> | </em><em>None</em>) – keep only this many of the newest checkpoints; None keeps them all.</p></li>
+<li><p><strong>split_moves</strong> (<em>bool</em>) – where the search would stop, try splitting a label that holds two clusters of rows.</p></li>
+<li><p><strong>split_exclusive</strong> (<em>bool</em>) – with split_moves, also split a label whose two clusters rarely appear in the same sample.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New chain with the cheapest labeling found; prob_in_model equals <code class="docutils literal notranslate"><span class="pre">find_prob_in_model(chain,</span> <span class="pre">K,</span> <span class="pre">eps=0)</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – posterior_chain is not a PosteriorChain.</p></li>
+<li><p><strong>ValueError</strong> – an argument is invalid, checkpoint_dir holds another run, or the checkpoint belongs to another run.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>UserWarning</strong> – with split_moves, the budget ran out before the search stopped; on a resume with nothing to run.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-petra.copula_flows">Copula-flow relabeling: each slot is fit with a Gaussian-copula marginal transform plus a normalizing flow.</p>
+<p>The flows come from <code class="docutils literal notranslate"><span class="pre">coppuccino.copula_flows.normalizing_flows_fit</span></code>. Importing this module imports jax but leaves its
+64-bit mode alone; set <code class="docutils literal notranslate"><span class="pre">JAX_ENABLE_X64=1</span></code> before any JAX array exists if the fits need double precision.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.copula_flows_aux_distribution">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">copula_flows_aux_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">floor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-50.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.copula_flows_aux_distribution" title="Link to this definition">¶</a></dt>
+<dd><p>Return the floored log-density each requested flow gives every row of one sample.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample</strong> (<em>ndarray</em>) – (S, P) rows; a NaN row is an absent source.</p></li>
+<li><p><strong>aux_parameters</strong> (<em>List</em>) – fitted flows, one per label.</p></li>
+<li><p><strong>source_index</strong> (<em>int</em><em> | </em><em>Sequence</em><em>[</em><em>int</em><em>] </em><em>| </em><em>ndarray</em>) – label or labels to evaluate.</p></li>
+<li><p><strong>floor</strong> (<em>float</em>) – value substituted for a non-finite log-density; the same in every entry point, so costs compare.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(L, S) array; row i belongs to label <code class="docutils literal notranslate"><span class="pre">source_index[i]</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Array</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.make_catalog_copula_flows">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">make_catalog_copula_flows</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initialization_param_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_with_mv_normal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">800</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learning_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_floor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-50.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.make_catalog_copula_flows" title="Link to this definition">¶</a></dt>
+<dd><p>Build a catalog with copula-flow relabeling after the shared initialization passes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – input chain.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of slots in the catalog, at least the chain’s num_sources.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – ceiling on the flow iterations; each one retrains every populated slot’s flow.</p></li>
+<li><p><strong>initialization_param_index</strong> (<em>int</em><em> | </em><em>None</em>) – parameter for the univariate initialization pass; None skips that pass.</p></li>
+<li><p><strong>shuffle_seed</strong> (<em>int</em><em> | </em><em>None</em>) – seed for shuffling the entries of each sample; None keeps their order.</p></li>
+<li><p><strong>rng_seed</strong> (<em>int</em>) – seed for the flow initialization and training.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>Path</em><em> | </em><em>None</em>) – directory for checkpoints of the flow relabeling; None for none.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>Path</em><em> | </em><em>None</em>) – checkpoint of the flow relabeling to resume; the initialization passes are then skipped.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show progress bars over the samples and over flow training.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound on prob_in_model inside the cost matrix only.</p></li>
+<li><p><strong>threshold_samples</strong> (<em>int</em>) – a slot with at most this many present rows gets the uniform prior instead of a flow.</p></li>
+<li><p><strong>init_with_mv_normal</strong> (<em>bool</em>) – run the multivariate normal initialization pass.</p></li>
+<li><p><strong>init_num_iterations</strong> (<em>int</em>) – iteration ceiling of each initialization pass.</p></li>
+<li><p><strong>knots</strong> (<em>int</em>) – spline knots per flow layer.</p></li>
+<li><p><strong>flow_layers</strong> (<em>int</em>) – number of flow layers.</p></li>
+<li><p><strong>max_epochs</strong> (<em>int</em>) – maximum training epochs per flow.</p></li>
+<li><p><strong>max_patience</strong> (<em>int</em>) – early-stopping patience, in epochs without validation improvement.</p></li>
+<li><p><strong>learning_rate</strong> (<em>float</em>) – Adam learning rate.</p></li>
+<li><p><strong>log_prob_floor</strong> (<em>float</em>) – value substituted for a non-finite flow log-density.</p></li>
+<li><p><strong>patience</strong> (<em>int</em><em> | </em><em>None</em>) – deprecated spelling of max_patience.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the relabeled chain, with its cost in cost_dict and its prob_in_model unclipped.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – a setting out of range, or initialization_param_index not None or a column of the chain.</p></li>
+<li><p><strong>TypeError</strong> – patience together with a max_patience other than the default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>DeprecationWarning</strong> – patience was given.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.make_copula_flows_fit">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">make_copula_flows_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learning_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">800</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.make_copula_flows_fit" title="Link to this definition">¶</a></dt>
+<dd><p>Return a fit that trains one copula flow per slot and gives a sparse slot the chain-wide uniform prior.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples; only the uniform prior’s bounds are taken from it.</p></li>
+<li><p><strong>rng_seed</strong> (<em>int</em>) – seed for the flow initialization and training.</p></li>
+<li><p><strong>threshold_samples</strong> (<em>int</em>) – a slot with at most this many present rows gets the uniform prior instead of a flow.</p></li>
+<li><p><strong>knots</strong> (<em>int</em>) – spline knots per flow layer.</p></li>
+<li><p><strong>max_patience</strong> (<em>int</em>) – early-stopping patience, in epochs without validation improvement.</p></li>
+<li><p><strong>learning_rate</strong> (<em>float</em>) – Adam learning rate.</p></li>
+<li><p><strong>max_epochs</strong> (<em>int</em>) – maximum training epochs per flow.</p></li>
+<li><p><strong>flow_layers</strong> (<em>int</em>) – number of flow layers.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show each flow’s training progress bar.</p></li>
+<li><p><strong>patience</strong> (<em>int</em><em> | </em><em>None</em>) – deprecated spelling of max_patience.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">copula_flows_fit(chain,</span> <span class="pre">max_num_sources)</span></code>, giving one fitted distribution per slot.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – a flow setting out of range.</p></li>
+<li><p><strong>TypeError</strong> – patience together with a max_patience other than the default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>DeprecationWarning</strong> – patience was given.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Callable</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.quiet_external_fit">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">quiet_external_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">quiet</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.quiet_external_fit" title="Link to this definition">¶</a></dt>
+<dd><p>Discard stderr inside the block, silencing a progress bar the fitter offers no switch for.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>quiet</strong> (<em>bool</em>) – discard stderr, warnings included, when True; do nothing when False.</p>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Iterator</em>[None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.relabel_copula_flows">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">relabel_copula_flows</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learning_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">800</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_floor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-50.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.relabel_copula_flows" title="Link to this definition">¶</a></dt>
+<dd><p>Relabel with copula-flow fits until an iteration fails to lower the cost.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain to relabel; widened to max_num_sources if needed.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em><em> | </em><em>None</em>) – number of slots; None means the chain’s num_sources.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – iteration ceiling, at least 1.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound on prob_in_model inside the cost matrix only.</p></li>
+<li><p><strong>rng_seed</strong> (<em>int</em>) – seed for the flow initialization and training.</p></li>
+<li><p><strong>threshold_samples</strong> (<em>int</em>) – a slot with at most this many present rows gets the uniform prior instead of a flow.</p></li>
+<li><p><strong>knots</strong> (<em>int</em>) – spline knots per flow layer.</p></li>
+<li><p><strong>max_patience</strong> (<em>int</em>) – early-stopping patience, in epochs without validation improvement.</p></li>
+<li><p><strong>learning_rate</strong> (<em>float</em>) – Adam learning rate.</p></li>
+<li><p><strong>max_epochs</strong> (<em>int</em>) – maximum training epochs per flow.</p></li>
+<li><p><strong>flow_layers</strong> (<em>int</em>) – number of flow layers.</p></li>
+<li><p><strong>log_prob_floor</strong> (<em>float</em>) – value substituted for a non-finite flow log-density.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>Path</em><em> | </em><em>None</em>) – directory for a checkpoint of the best labeling after each iteration; None for none.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>Path</em><em> | </em><em>None</em>) – checkpoint file, or directory of them, of a run with the same chain and settings.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show progress bars over the samples and over flow training.</p></li>
+<li><p><strong>patience</strong> (<em>int</em><em> | </em><em>None</em>) – deprecated spelling of max_patience.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the cheapest labeling seen, its cost in <code class="docutils literal notranslate"><span class="pre">cost_dict[max_num_sources]</span></code> and its prob_in_model unclipped.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – a setting out of range, or a checkpoint written by another run or with other flow settings.</p></li>
+<li><p><strong>TypeError</strong> – patience together with a max_patience other than the default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>DeprecationWarning</strong> – patience was given.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.safe_flow_log_prob">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">safe_flow_log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flow</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">floor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-50.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.safe_flow_log_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Return <code class="docutils literal notranslate"><span class="pre">flow.log_prob(x)</span></code> with every non-finite value, such as an absent NaN row, replaced by <cite>floor</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>flow</strong> (<em>Any</em><em> | </em><em>None</em>) – anything with <code class="docutils literal notranslate"><span class="pre">log_prob</span></code>, a flowjax distribution or a UniformPrior; None marks an unfitted slot.</p></li>
+<li><p><strong>x</strong> (<em>_Buffer</em><em> | </em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>] </em><em>| </em><em>_NestedSequence</em><em>[</em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>]</em><em>] </em><em>| </em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em> | </em><em>_NestedSequence</em><em>[</em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em>]</em>) – (P,) point or (n, P) points.</p></li>
+<li><p><strong>floor</strong> (<em>float</em>) – value substituted for a non-finite log-density.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a finite scalar for a 1-D <cite>x</cite>, else (n,), a scalar result broadcast; floor throughout for None or an empty x.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – <cite>x</cite> is not 1-D or 2-D.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Array</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.copula_flows.stack_flow_log_probs">
+<span class="sig-prename descclassname"><span class="pre">petra.copula_flows.</span></span><span class="sig-name descname"><span class="pre">stack_flow_log_probs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flows</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">floor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-50.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.copula_flows.stack_flow_log_probs" title="Link to this definition">¶</a></dt>
+<dd><p>Return the floored log-density every flow gives every row of one sample.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>flows</strong> (<em>Sequence</em><em>[</em><em>Any</em><em>]</em>) – one fitted distribution per label; an entry may be None or a UniformPrior.</p></li>
+<li><p><strong>sample</strong> (<em>ndarray</em>) – (S, P) rows; a NaN row is an absent source.</p></li>
+<li><p><strong>floor</strong> (<em>float</em>) – value substituted for a non-finite log-density.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>finite (len(flows), S) array.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – <cite>sample</cite> is not 2-D.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Array</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-petra.posterior_chain">
+<span id="chains-and-sample-loading"></span><h2>Chains and sample loading<a class="headerlink" href="#module-petra.posterior_chain" title="Link to this heading">¶</a></h2>
+<p>The PosteriorChain container and its Feather file format.</p>
+<p>A chain is stored as native float64 <code class="docutils literal notranslate"><span class="pre">(n_samples,</span> <span class="pre">num_sources,</span> <span class="pre">num_params_per_source)</span></code>; an all-NaN row is an
+absent source. Metadata is strict JSON under <code class="xref py py-data docutils literal notranslate"><span class="pre">FEATHER_METADATA_KEY</span></code>; legacy padded-column files still read.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">petra.posterior_chain.</span></span><span class="sig-name descname"><span class="pre">PosteriorChain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_params_per_source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trans_dimensional=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_in_model=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cost_dict=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_nan_convention=True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Posterior samples of a variable number of sources, with the metadata of their current labeling.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P), (N, S*P) or flat samples of any float or integer dtype, or a masked array (masked = NaN).</p></li>
+<li><p><strong>num_sources</strong> (<em>int</em>) – number of source slots S.</p></li>
+<li><p><strong>num_params_per_source</strong> (<em>int</em>) – parameters per source P.</p></li>
+<li><p><strong>trans_dimensional</strong> (<em>bool</em>) – whether the caller considers S variable; metadata no code in petra reads.</p></li>
+<li><p><strong>prob_in_model</strong> (<em>ndarray</em><em> | </em><em>None</em>) – (S,) inclusion probability per slot, or None for not computed.</p></li>
+<li><p><strong>cost_dict</strong> (<em>dict</em>) – cost of this labeling keyed by number of sources; None becomes {}.</p></li>
+<li><p><strong>copy</strong> (<em>bool</em>) – store a copy; otherwise a native float64 input is stored without copying.</p></li>
+<li><p><strong>validate_nan_convention</strong> (<em>bool</em>) – refuse a row mixing NaN and numbers; derived chains inherit the setting.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – a dimension, the dtype, the shape, a partial-NaN row, prob_in_model or a cost_dict entry is invalid.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.chain">
+<span class="sig-name descname"><span class="pre">chain</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.chain" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.copy" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.cost_dict">
+<span class="sig-name descname"><span class="pre">cost_dict</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.cost_dict" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.expand_chain">
+<span class="sig-name descname"><span class="pre">expand_chain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.expand_chain" title="Link to this definition">¶</a></dt>
+<dd><p>Return a copy widened to <cite>max_num_sources</cite> slots, the new ones absent in every sample.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>max_num_sources</strong> (<em>int</em>) – new slot count, an integer of at least num_sources.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a trans-dimensional chain with an empty cost_dict and, if this one has one, prob_in_model recomputed.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – max_num_sources is not an integer &gt;= 1 or is below num_sources.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.from_arrow_table">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_arrow_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_nan_convention</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.from_arrow_table" title="Link to this definition">¶</a></dt>
+<dd><p>Rebuild a chain from a table read out of a Feather file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<em>Table</em>) – contents of a file written by <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.to_feather" title="petra.posterior_chain.PosteriorChain.to_feather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_feather()</span></code></a> or the legacy writer.</p></li>
+<li><p><strong>source</strong> (<em>str</em>) – where the table came from, named in errors and log messages.</p></li>
+<li><p><strong>validate_nan_convention</strong> (<em>bool</em>) – passed to the constructor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the chain, as <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.read_feather" title="petra.posterior_chain.PosteriorChain.read_feather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">read_feather()</span></code></a> returns it.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – as <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.read_feather" title="petra.posterior_chain.PosteriorChain.read_feather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">read_feather()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.get_chain">
+<span class="sig-name descname"><span class="pre">get_chain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.get_chain" title="Link to this definition">¶</a></dt>
+<dd><p>Return <code class="docutils literal notranslate"><span class="pre">chain[burn::thin]</span></code>, a view; on a UCBMCMC chain a burn removes whole dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard, an integer &gt;= 0.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – keep every thin-th sample, an integer &gt;= 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(ceil((N - burn) / thin), S, P) view of the chain.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – burn or thin is a bool, not an integer, or out of range.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.get_valid_chain_entry">
+<span class="sig-name descname"><span class="pre">get_valid_chain_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.get_valid_chain_entry" title="Link to this definition">¶</a></dt>
+<dd><p>Return the samples in which one source slot is present.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>entry_index</strong> (<em>int</em>) – source slot to extract.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard first, as in <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.get_chain" title="petra.posterior_chain.PosteriorChain.get_chain"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_chain()</span></code></a>.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – thinning interval, as in <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.get_chain" title="petra.posterior_chain.PosteriorChain.get_chain"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_chain()</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(n_present, P) rows of that slot with no NaN.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – burn or thin is invalid.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.num_params_per_source">
+<span class="sig-name descname"><span class="pre">num_params_per_source</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.num_params_per_source" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.num_sources">
+<span class="sig-name descname"><span class="pre">num_sources</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.num_sources" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.prob_in_model">
+<span class="sig-name descname"><span class="pre">prob_in_model</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.prob_in_model" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.randomize_entries">
+<span class="sig-name descname"><span class="pre">randomize_entries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.randomize_entries" title="Link to this definition">¶</a></dt>
+<dd><p>Return a copy with the source slots of each sample shuffled; whole rows move.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>seed</strong> (<em>int</em><em> | </em><em>None</em>) – seed for numpy.random.default_rng.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the shuffled chain, with an empty cost_dict and, if this one has one, prob_in_model recomputed.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.read_feather">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">read_feather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">feather_filepath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_nan_convention</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.read_feather" title="Link to this definition">¶</a></dt>
+<dd><p>Read a chain written by <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.to_feather" title="petra.posterior_chain.PosteriorChain.to_feather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_feather()</span></code></a> or by the legacy padded-column writer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>feather_filepath</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – path to the file.</p></li>
+<li><p><strong>validate_nan_convention</strong> (<em>bool</em>) – passed to the constructor; the file cannot switch the check off.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the chain; a stored prob_in_model of the wrong shape is recomputed from the samples with a warning.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the file is not a PosteriorChain file, its columns do not fit its dimensions,
+    or it holds a partial-NaN row while validate_nan_convention is True.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.shape">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shape</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.shape" title="Link to this definition">¶</a></dt>
+<dd><p>Shape of the stored chain, <code class="docutils literal notranslate"><span class="pre">(n_samples,</span> <span class="pre">num_sources,</span> <span class="pre">num_params_per_source)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.to_arrow_table">
+<span class="sig-name descname"><span class="pre">to_arrow_table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.to_arrow_table" title="Link to this definition">¶</a></dt>
+<dd><p>Return the Arrow table <a class="reference internal" href="#petra.posterior_chain.PosteriorChain.to_feather" title="petra.posterior_chain.PosteriorChain.to_feather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_feather()</span></code></a> writes: columns “0”..”S*P-1” and strict-JSON metadata.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the table, with this chain’s metadata under FEATHER_METADATA_KEY.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – a cost_dict entry cannot be written unchanged.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Table</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.to_feather">
+<span class="sig-name descname"><span class="pre">to_feather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">feather_filepath</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.to_feather" title="Link to this definition">¶</a></dt>
+<dd><p>Write the chain and its metadata to a Feather file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>feather_filepath</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – output path.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – a cost_dict entry cannot be written unchanged, such as a non-finite cost; nothing is written.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.trans_dimensional">
+<span class="sig-name descname"><span class="pre">trans_dimensional</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.trans_dimensional" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.posterior_chain.PosteriorChain.validate_nan_convention">
+<span class="sig-name descname"><span class="pre">validate_nan_convention</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#petra.posterior_chain.PosteriorChain.validate_nan_convention" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<p id="module-petra.samples_io">Readers that turn sampler output on disk into a <a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><code class="xref py py-class docutils literal notranslate"><span class="pre">PosteriorChain</span></code></a>.</p>
+<p><a class="reference internal" href="#petra.samples_io.load_samples" title="petra.samples_io.load_samples"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_samples()</span></code></a> picks the reader: a directory is UCBMCMC output, a text file is fixed-num-sources (4 trailing
+metadata columns) or product-space (5). Text is UTF-8 with an optional byte-order mark; fill_value must be NaN.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.samples_io.load_samples">
+<span class="sig-prename descclassname"><span class="pre">petra.samples_io.</span></span><span class="sig-name descname"><span class="pre">load_samples</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_params_per_source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">nan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_low_numbers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.samples_io.load_samples" title="Link to this definition">¶</a></dt>
+<dd><p>Load a chain, choosing the reader from the path: a directory, or a text file’s first data row.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – chain text file or UCBMCMC directory.</p></li>
+<li><p><strong>num_params_per_source</strong> (<em>int</em>) – parameters per source P.</p></li>
+<li><p><strong>fill_value</strong> (<em>float</em>) – padding for absent sources; must be NaN.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard, an integer &gt;= 0; per file for a UCBMCMC directory.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – keep every thin-th sample, an integer &gt;= 1; per file for a UCBMCMC directory.</p></li>
+<li><p><strong>remove_low_numbers</strong> (<em>bool</em>) – skip UCBMCMC files with at most 8 samples; ignored for a text file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the loaded chain.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – an argument is invalid, the file fits neither or both text layouts, or the reader refuses it.</p></li>
+<li><p><strong>FileNotFoundError</strong> – path does not exist.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.samples_io.load_samples_fixed_num_sources">
+<span class="sig-prename descclassname"><span class="pre">petra.samples_io.</span></span><span class="sig-name descname"><span class="pre">load_samples_fixed_num_sources</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_params_per_source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.samples_io.load_samples_fixed_num_sources" title="Link to this definition">¶</a></dt>
+<dd><p>Load a fixed-num-sources text file: source vectors followed by four metadata columns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filepath</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – chain text file.</p></li>
+<li><p><strong>num_params_per_source</strong> (<em>int</em>) – parameters per source P.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard, an integer &gt;= 0 below the sample count.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – keep every thin-th sample, an integer &gt;= 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the chain, with trans_dimensional False.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – an argument is invalid, no sample is left, or the rows are not whole source vectors plus 4 columns.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.samples_io.load_samples_product_space">
+<span class="sig-prename descclassname"><span class="pre">petra.samples_io.</span></span><span class="sig-name descname"><span class="pre">load_samples_product_space</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_params_per_source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">nan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.samples_io.load_samples_product_space" title="Link to this definition">¶</a></dt>
+<dd><p>Load a product-space text file, whose fifth-from-last column is the number of sources minus one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filepath</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – chain text file.</p></li>
+<li><p><strong>num_params_per_source</strong> (<em>int</em>) – parameters per source P.</p></li>
+<li><p><strong>fill_value</strong> (<em>float</em>) – padding for absent sources; must be NaN.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard, an integer &gt;= 0 below the sample count.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – keep every thin-th sample, an integer &gt;= 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a trans-dimensional chain as wide as the largest source count kept after burn and thin.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – an argument is invalid, no sample is left, every kept sample has zero sources,
+    or the columns or source counts do not describe a product-space layout.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.samples_io.load_samples_ucbmcmc">
+<span class="sig-prename descclassname"><span class="pre">petra.samples_io.</span></span><span class="sig-name descname"><span class="pre">load_samples_ucbmcmc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain_folder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_params_per_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">nan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_low_numbers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.samples_io.load_samples_ucbmcmc" title="Link to this definition">¶</a></dt>
+<dd><p>Load a UCBMCMC directory of <code class="docutils literal notranslate"><span class="pre">dimension_chain.dat.&lt;n&gt;</span></code> files, n consecutive rows per sample.</p>
+<p>The result is ordered by dimension, not by iteration: every n = 1 sample, then every n = 2 sample, and so on.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain_folder</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – the directory, its name taken literally.</p></li>
+<li><p><strong>num_params_per_source</strong> (<em>int</em>) – parameters per source P.</p></li>
+<li><p><strong>fill_value</strong> (<em>float</em>) – padding for absent sources; must be NaN.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) – samples to discard from each file separately, which reweights the dimensions; leave it 0.</p></li>
+<li><p><strong>thin</strong> (<em>int</em>) – keep every thin-th sample of each file, an integer &gt;= 1.</p></li>
+<li><p><strong>remove_low_numbers</strong> (<em>bool</em>) – skip files with at most 8 samples, counted before burn and thin.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a trans-dimensional chain as wide as the largest n holding samples; burn and thin never narrow it.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – an argument is invalid, no file holds samples, burn and thin empty every file,
+    or a file is not a whole number of P-column samples.</p></li>
+<li><p><strong>FileNotFoundError</strong> – chain_folder does not exist.</p></li>
+<li><p><strong>NotADirectoryError</strong> – chain_folder is not a directory.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>UserWarning</strong> – a file holds no samples, burn and thin empty a file, or a file name does not end in a number.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-petra.initialization">
+<span id="relabeling-internals"></span><h2>Relabeling internals<a class="headerlink" href="#module-petra.initialization" title="Link to this heading">¶</a></h2>
+<p>Warm starts for the relabelers: the frequency-histogram labeling and the univariate-normal relabeling.</p>
+<p><cite>run_initialization_passes</cite> is the preamble of the copula entry point; it takes both relabelers
+as arguments, so each entry point’s own namespace is where a pass can be substituted.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.initialization.check_param_index">
+<span class="sig-prename descclassname"><span class="pre">petra.initialization.</span></span><span class="sig-name descname"><span class="pre">check_param_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initialization_param_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.initialization.check_param_index" title="Link to this definition">¶</a></dt>
+<dd><p>Require <cite>initialization_param_index</cite> to be None or an integer column of the chain, not a bool.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_params</strong> (<em>int</em>) – parameters per source in the chain.</p></li>
+<li><p><strong>initialization_param_index</strong> (<em>Any</em>) – the entry point’s <cite>initialization_param_index</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – it is neither None nor an integer in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">num_params)</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.initialization.label_chain_by_histogram">
+<span class="sig-prename descclassname"><span class="pre">petra.initialization.</span></span><span class="sig-name descname"><span class="pre">label_chain_by_histogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_time_yrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_surrounding_bins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relabeling_parameter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_extra_entries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low_num_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.initialization.label_chain_by_histogram" title="Link to this definition">¶</a></dt>
+<dd><p>Label a chain by greedily peeling sources off a histogram of one parameter, fullest bin first.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain to label; never modified.</p></li>
+<li><p><strong>obs_time_yrs</strong> (<em>float</em>) – observation time in years; the bin width is <code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">/</span> <span class="pre">(obs_time_yrs</span> <span class="pre">*</span> <span class="pre">31_536_000)</span></code> Hz.</p></li>
+<li><p><strong>num_surrounding_bins</strong> (<em>int</em>) – bins on either side of the fullest bin that still count as the same source.</p></li>
+<li><p><strong>relabeling_parameter</strong> (<em>int</em>) – parameter to histogram, normally the frequency.</p></li>
+<li><p><strong>num_extra_entries</strong> (<em>int</em>) – labels beyond <code class="docutils literal notranslate"><span class="pre">chain.num_sources</span></code> the labeling may create before it gives up.</p></li>
+<li><p><strong>low_num_samples</strong> (<em>int</em>) – labels holding fewer samples than this are compacted towards the front.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New chain of the non-empty labels, sorted by decreasing sample count; equal counts keep reverse slot order.
+<code class="docutils literal notranslate"><span class="pre">trans_dimensional</span></code> and <code class="docutils literal notranslate"><span class="pre">validate_nan_convention</span></code> are inherited.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – obs_time_yrs is not positive, or more than <code class="docutils literal notranslate"><span class="pre">num_sources</span> <span class="pre">+</span> <span class="pre">num_extra_entries</span></code> labels are needed.</p>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>UserWarning</strong> – some source rows mix NaN with finite values; they are absent and left out of the result.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.initialization.relabel_univariate_normal">
+<span class="sig-prename descclassname"><span class="pre">petra.initialization.</span></span><span class="sig-name descname"><span class="pre">relabel_univariate_normal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_parameter_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.initialization.relabel_univariate_normal" title="Link to this definition">¶</a></dt>
+<dd><p>Relabel a chain with univariate normal fits to one parameter, without split moves.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain to relabel; not modified.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em><em> | </em><em>None</em>) – number of source slots; None uses the chain’s num_sources.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – ceiling on the iterations, counting those a resumed checkpoint holds.</p></li>
+<li><p><strong>init_parameter_index</strong> (<em>int</em>) – parameter to fit.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound on prob_in_model inside the cost matrix.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – directory to save the best labeling to each time it improves.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – checkpoint file or directory to resume from; it must come from this method and parameter.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples of each iteration.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New chain with the cheapest labeling found, unclipped prob_in_model and <code class="docutils literal notranslate"><span class="pre">cost_dict[max_num_sources]</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – an argument is invalid, or the checkpoint belongs to another run.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.initialization.run_initialization_passes">
+<span class="sig-prename descclassname"><span class="pre">petra.initialization.</span></span><span class="sig-name descname"><span class="pre">run_initialization_passes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">univariate_relabeler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mv_normal_relabeler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_mv_normal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.initialization.run_initialization_passes" title="Link to this definition">¶</a></dt>
+<dd><p>Run the univariate pass if <cite>param_index</cite> is set, then the multivariate-normal pass if <cite>with_mv_normal</cite> is.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – chain already prepared by <cite>petra.relabel.prepare_chain</cite>; not modified.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of source slots, passed to both passes.</p></li>
+<li><p><strong>univariate_relabeler</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">f(chain,</span> <span class="pre">max_num_sources=,</span> <span class="pre">num_iterations=,</span> <span class="pre">init_parameter_index=,</span> <span class="pre">progress=)</span></code>.</p></li>
+<li><p><strong>mv_normal_relabeler</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">f(chain,</span> <span class="pre">max_num_sources=,</span> <span class="pre">num_iterations=,</span> <span class="pre">progress=,</span> <span class="pre">split_moves=False)</span></code>.</p></li>
+<li><p><strong>with_mv_normal</strong> (<em>bool</em>) – run the multivariate-normal pass.</p></li>
+<li><p><strong>param_index</strong> (<em>int</em><em> | </em><em>None</em>) – parameter of the univariate pass, or None to skip that pass.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – ceiling on the iterations of each pass.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – the checkpoint the caller resumes from; anything but None skips both passes.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples of each pass.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The chain after the passes that ran; <cite>posterior_chain</cite> itself if none did.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – param_index is neither None nor a column of the chain, checked on a resume too.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-petra.relabel">The shared relabeling loop: fit, assign every sample with the Hungarian algorithm, keep the cheapest labeling.</p>
+<p>A method is a fit and a cost matrix; cost is negated log-likelihood, so lower is better. With <code class="docutils literal notranslate"><span class="pre">split_moves</span></code> the loop
+first tries, wherever it would stop, to split a label holding two clusters into a sparse one. Inputs are never modified.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.relabel.check_chain">
+<span class="sig-prename descclassname"><span class="pre">petra.relabel.</span></span><span class="sig-name descname"><span class="pre">check_chain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.relabel.check_chain" title="Link to this definition">¶</a></dt>
+<dd><p>Check a relabeler’s chain and target width before any work, and return the width.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<em>Any</em>) – the chain argument; a PosteriorChain holding at least one sample.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>Any</em>) – number of source slots, at least the chain’s; None means the chain’s own width.</p></li>
+<li><p><strong>required</strong> (<em>bool</em>) – refuse None for max_num_sources.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the width as an int.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – posterior_chain is not a PosteriorChain.</p></li>
+<li><p><strong>ValueError</strong> – the chain holds no samples, or max_num_sources is not an integer &gt;= 1 or is below the chain’s width.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.relabel.prepare_chain">
+<span class="sig-prename descclassname"><span class="pre">petra.relabel.</span></span><span class="sig-name descname"><span class="pre">prepare_chain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">widen_first</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.relabel.prepare_chain" title="Link to this definition">¶</a></dt>
+<dd><p>Check, widen and optionally shuffle a chain before relabeling.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – the chain to prepare; never modified.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em><em> | </em><em>None</em>) – number of source slots, at least the chain’s; None means the chain’s own width.</p></li>
+<li><p><strong>shuffle_seed</strong> (<em>int</em><em> | </em><em>None</em>) – None not to shuffle, or a non-negative integer seed for a per-sample shuffle of the slots.</p></li>
+<li><p><strong>widen_first</strong> (<em>bool</em>) – widen before shuffling, spreading the padding over every slot; otherwise added slots start empty.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the input itself when there is nothing to do; otherwise a new chain with prob_in_model re-derived from it,
+an empty cost_dict and the input’s validate_nan_convention.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – posterior_chain is not a PosteriorChain, or shuffle_seed is not None or an integer.</p></li>
+<li><p><strong>ValueError</strong> – the chain holds no samples, max_num_sources is invalid, or shuffle_seed is negative.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.relabel.relabel_samples_one_iteration">
+<span class="sig-prename descclassname"><span class="pre">petra.relabel.</span></span><span class="sig-name descname"><span class="pre">relabel_samples_one_iteration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_in_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_cost_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.relabel.relabel_samples_one_iteration" title="Link to this definition">¶</a></dt>
+<dd><p>Assign each sample’s rows to labels with the Hungarian algorithm under one fit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples.</p></li>
+<li><p><strong>aux_parameters</strong> (<em>Any</em>) – the fit, passed to compute_cost_matrix unchanged.</p></li>
+<li><p><strong>prob_in_model</strong> (<em>ndarray</em>) – (K,) inclusion probabilities fed to the cost matrix.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of labels K, at most S; slots no label is assigned follow in their own order.</p></li>
+<li><p><strong>compute_cost_matrix</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>ndarray</em><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">(sample,</span> <span class="pre">aux_parameters,</span> <span class="pre">prob_in_model,</span> <span class="pre">K)</span></code> giving the (K, S) rewards to maximize.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>minus the mean maximized
+reward sum, so lower is better.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the (N, S, P) relabeled samples, each a permutation of its own rows, and the cost</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.relabel.run_relabeling_loop">
+<span class="sig-prename descclassname"><span class="pre">petra.relabel.</span></span><span class="sig-name descname"><span class="pre">run_relabeling_loop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_fit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_cost_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resume_from</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">settings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_checkpoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_moves</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_exclusive</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.relabel.run_relabeling_loop" title="Link to this definition">¶</a></dt>
+<dd><p>Relabel a chain by alternating fit and assignment, keep the cheapest labeling, and stop when the cost stalls.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – the chain to relabel, never modified; when resuming, the chain the run was started with.</p></li>
+<li><p><strong>param_fit</strong> (<em>Callable</em><em>[</em><em>[</em><em>ndarray</em><em>, </em><em>int</em><em>]</em><em>, </em><em>Any</em><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">K)</span> <span class="pre">-&gt;</span> <span class="pre">aux_parameters</span></code>, refitted to each new labeling.</p></li>
+<li><p><strong>compute_cost_matrix</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>ndarray</em><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">(sample,</span> <span class="pre">aux_parameters,</span> <span class="pre">prob_in_model,</span> <span class="pre">K)</span></code> giving the (K, S) rewards to maximize.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em><em> | </em><em>None</em>) – number of source slots K, at least the chain’s; None means the chain’s own width.</p></li>
+<li><p><strong>num_iterations</strong> (<em>int</em>) – iteration budget, counting those a resumed checkpoint holds and those split passes spend.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound of the probabilities fed to the cost matrix; the returned prob_in_model is unclipped.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – directory the best labeling is written to whenever it or its cost improves, and on stopping.</p></li>
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>] </em><em>| </em><em>None</em>) – checkpoint file, or directory of them, of an earlier run of the same method on the same chain.</p></li>
+<li><p><strong>progress</strong> (<em>bool</em>) – show a progress bar over the samples of each iteration.</p></li>
+<li><p><strong>method</strong> (<em>str</em><em> | </em><em>None</em>) – name of the method; required with checkpoint_dir or resume_from, compared on resume.</p></li>
+<li><p><strong>settings</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – values that change what a cost means; recorded and compared on resume.</p></li>
+<li><p><strong>run_info</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – settings of the entry point; recorded and never compared.</p></li>
+<li><p><strong>keep_checkpoints</strong> (<em>int</em><em> | </em><em>None</em>) – keep only this many newest checkpoints; None keeps them all.</p></li>
+<li><p><strong>split_moves</strong> (<em>bool</em>) – where the loop would stop, first try to split a label holding two clusters into a sparse label.</p></li>
+<li><p><strong>split_exclusive</strong> (<em>bool</em>) – with split_moves, also split a label whose two clusters the chain rarely shows together.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the cheapest labeling accepted, with prob_in_model recomputed from it without clipping.
+<cite>cost_dict[K]</cite> is the returned labeling’s cost under the fit before it.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – posterior_chain is not a PosteriorChain.</p></li>
+<li><p><strong>ValueError</strong> – an invalid setting, width or empty chain; checkpointing without method; a checkpoint_dir holding
+    other checkpoints; or a resumed checkpoint of another run.</p></li>
+<li><p><strong>FileNotFoundError</strong> – resume_from is neither a checkpoint file nor a directory holding one.</p></li>
+<li><p><strong>PermissionError</strong> – checkpoint_dir is not writable.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Warns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>UserWarning</strong> – the resumed run had already stopped or used the budget; with split_moves, the budget ended the
+search before it stopped.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-petra.checkpoint">Relabeling checkpoints: the run fingerprint, atomic writes with pruning, discovery and verified loads.</p>
+<p>A checkpoint is a PosteriorChain Feather file numbered by the iteration that found its labeling, with the run state
+under <code class="xref py py-data docutils literal notranslate"><span class="pre">CHECKPOINT_METADATA_KEY</span></code>; a resume refuses a file without it, of another version, or of another run.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">Checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_iteration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">completed_iterations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.Checkpoint" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A checkpoint read back by <a class="reference internal" href="#petra.checkpoint.load_checkpoint" title="petra.checkpoint.load_checkpoint"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_checkpoint()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>str</em>) – the file read.</p></li>
+<li><p><strong>file_iteration</strong> (<em>int</em>) – the number in its name, the iteration its labeling was found at; 0 for an unnumbered file.</p></li>
+<li><p><strong>completed_iterations</strong> (<em>int</em>) – iterations the run that wrote it had completed, <code class="docutils literal notranslate"><span class="pre">state[&quot;iteration&quot;]</span></code>.</p></li>
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – the checkpointed labeling, with its prob_in_model and cost_dict.</p></li>
+<li><p><strong>state</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – the run fingerprint and progress stored with it.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint.completed_iterations">
+<span class="sig-name descname"><span class="pre">completed_iterations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#petra.checkpoint.Checkpoint.completed_iterations" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint.file_iteration">
+<span class="sig-name descname"><span class="pre">file_iteration</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#petra.checkpoint.Checkpoint.file_iteration" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint.path">
+<span class="sig-name descname"><span class="pre">path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#petra.checkpoint.Checkpoint.path" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint.posterior_chain">
+<span class="sig-name descname"><span class="pre">posterior_chain</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><span class="pre">PosteriorChain</span></a></em><a class="headerlink" href="#petra.checkpoint.Checkpoint.posterior_chain" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="petra.checkpoint.Checkpoint.state">
+<span class="sig-name descname"><span class="pre">state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#petra.checkpoint.Checkpoint.state" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.checkpoint.find_latest_checkpoint">
+<span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">find_latest_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.find_latest_checkpoint" title="Link to this definition">¶</a></dt>
+<dd><p>Locate the highest-numbered checkpoint of a directory without opening any file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – a directory a run wrote checkpoints to.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>its path and number, the iteration its labeling was found at, or None if the directory is missing or holds
+none; the temporary files a write goes through never match.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[str, int] | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.checkpoint.load_checkpoint">
+<span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resume_from</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">fingerprint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.load_checkpoint" title="Link to this definition">¶</a></dt>
+<dd><p>Read a checkpoint file, or a directory’s newest one, and check it against the run that resumes it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>resume_from</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – a checkpoint file, or a directory of them.</p></li>
+<li><p><strong>fingerprint</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – the resuming run’s <a class="reference internal" href="#petra.checkpoint.run_fingerprint" title="petra.checkpoint.run_fingerprint"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_fingerprint()</span></code></a>; None only reads.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the checkpoint, its chain read with the validate_nan_convention its run stored.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>FileNotFoundError</strong> – resume_from is neither a file nor a directory holding a checkpoint.</p></li>
+<li><p><strong>ValueError</strong> – the file cannot be read (the message names an older one to resume from), is not a petra
+    checkpoint, holds run state of another layout version, or was written by another run: other samples,
+    shape, width, method, settings or eps.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.checkpoint.Checkpoint" title="petra.checkpoint.Checkpoint"><em>Checkpoint</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.checkpoint.prepare_checkpoint_dir">
+<span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">prepare_checkpoint_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resumed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.prepare_checkpoint_dir" title="Link to this definition">¶</a></dt>
+<dd><p>Create and check a run’s checkpoint directory before any work is done; nothing is ever deleted.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – directory the run will write its checkpoints to; created if missing.</p></li>
+<li><p><strong>resumed</strong> (<a class="reference internal" href="#petra.checkpoint.Checkpoint" title="petra.checkpoint.Checkpoint"><em>Checkpoint</em></a><em> | </em><em>None</em>) – the checkpoint a resumed run continues from, or None for a fresh run.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – a fresh run’s directory holds checkpoints; a resume’s own directory holds one numbered above the
+    resumed file or another with its number; any other directory given to a resume holds checkpoints.</p></li>
+<li><p><strong>OSError</strong> – the directory cannot be created, or (PermissionError) is not writable.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.checkpoint.run_fingerprint">
+<span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">run_fingerprint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">settings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.run_fingerprint" title="Link to this definition">¶</a></dt>
+<dd><p>Return the fingerprint every checkpoint of a run carries and a resume is checked against.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – the chain the run was given; shuffling, widening and relabeling leave its digest unchanged.</p></li>
+<li><p><strong>method</strong> (<em>str</em>) – name of the relabeling method; only that method may resume the run.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – the run’s number of source slots.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – the run’s clip bound.</p></li>
+<li><p><strong>settings</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – values that change what a cost means, keyed by the caller’s keyword names; compared on resume.</p></li>
+<li><p><strong>run_info</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>) – settings of the entry point, recorded and never compared.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the fingerprint, already in its form after a JSON round trip, so it compares equal to one read back.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, <em>Any</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.checkpoint.write_checkpoint">
+<span class="sig-prename descclassname"><span class="pre">petra.checkpoint.</span></span><span class="sig-name descname"><span class="pre">write_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.checkpoint.write_checkpoint" title="Link to this definition">¶</a></dt>
+<dd><p>Write a labeling and its run state as a checkpoint, atomically, then prune the directory’s older checkpoints.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>posterior_chain</strong> (<a class="reference internal" href="#petra.posterior_chain.PosteriorChain" title="petra.posterior_chain.PosteriorChain"><em>PosteriorChain</em></a>) – the labeling to save, with the prob_in_model and cost_dict a resume needs.</p></li>
+<li><p><strong>checkpoint_dir</strong> (<em>str</em><em> | </em><em>PathLike</em><em>[</em><em>str</em><em>]</em>) – the run’s directory; created if missing.</p></li>
+<li><p><strong>iteration</strong> (<em>int</em>) – iteration at which the labeling was found, the number in the file name.</p></li>
+<li><p><strong>state</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – run fingerprint and progress, stored as strict JSON under CHECKPOINT_METADATA_KEY.</p></li>
+<li><p><strong>keep</strong> (<em>int</em><em> | </em><em>None</em>) – if given, only this many highest-numbered checkpoints of the directory are kept after the write.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the path written.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – a cost_dict entry or a state value cannot be stored as strict JSON; nothing is written.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-petra.fits">Per-slot normal fits, their log-densities and the per-sample reward matrix of a relabeling pass.</p>
+<p>A fit maps a chain (N, K, P), absent rows all-NaN, to opaque parameters that a log-prob scores sample rows against;
+<cite>compute_cost_matrix</cite> turns both into the (K, S) rewards that <code class="docutils literal notranslate"><span class="pre">linear_sum_assignment</span></code> maximizes.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.compute_cost_matrix">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">compute_cost_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_in_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_distributions</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.compute_cost_matrix" title="Link to this definition">¶</a></dt>
+<dd><p>Return one sample’s reward matrix, indexed [label, slot], for <code class="docutils literal notranslate"><span class="pre">linear_sum_assignment(maximize=True)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample</strong> (<em>ndarray</em>) – (S, P) rows; a row with a NaN is absent.</p></li>
+<li><p><strong>aux_parameters</strong> (<em>Any</em>) – the fit’s output, passed to <cite>log_prob</cite> unchanged.</p></li>
+<li><p><strong>prob_in_model</strong> (<em>ndarray</em>) – (K,) inclusion probabilities, normally clipped to [eps, 1 - eps].</p></li>
+<li><p><strong>num_distributions</strong> (<em>int</em>) – number of labels K.</p></li>
+<li><p><strong>log_prob</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>ndarray</em><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">log_prob(sample,</span> <span class="pre">aux_parameters,</span> <span class="pre">labels)</span></code> giving (K, S) log-densities.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">log</span> <span class="pre">p_i</span> <span class="pre">+</span> <span class="pre">log_prob_i(x_j)</span></code> for a present row j, <code class="docutils literal notranslate"><span class="pre">log(1</span> <span class="pre">-</span> <span class="pre">p_i)</span></code> for an absent one.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(K, S) array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.mv_normal_fit">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">mv_normal_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.mv_normal_fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit a multivariate normal to the present rows of each of the first <cite>max_num_sources</cite> slots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples; a row with a NaN is absent.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of leading slots to fit, at most S.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(means, covariances) of shapes (max_num_sources, P) and (max_num_sources, P, P), each covariance with the
+ridge of <cite>regularize_covariance</cite>; a slot with fewer than P + 2 rows gets the pooled fit.</p>
+</dd>
+<dt class="field-odd">Warns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>UserWarning</strong> – a slot of repeated rows present in at most half the samples borrows the pooled covariance.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple[<em>ndarray</em>, <em>ndarray</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.mv_normal_log_prob">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">mv_normal_log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.mv_normal_log_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Return the multivariate normal log-density of every row of <cite>sample</cite> under each selected fit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample</strong> (<em>ndarray</em>) – (S, P) rows; a row with a NaN gives NaN.</p></li>
+<li><p><strong>aux_parameters</strong> (<em>tuple</em><em>[</em><em>ndarray</em><em>, </em><em>ndarray</em><em>]</em>) – (means, covariances) as <cite>mv_normal_fit</cite> returns them; lists of arrays work too.</p></li>
+<li><p><strong>source_index</strong> (<em>int</em><em> | </em><em>Sequence</em><em>[</em><em>int</em><em>] </em><em>| </em><em>ndarray</em>) – one fit index or several.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(L, S) log-densities for L selected fits, or (S,) when L is 1.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>numpy.linalg.LinAlgError</strong> – a selected covariance is not positive definite.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.regularize_covariance">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">regularize_covariance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cov</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fallback_variances</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.regularize_covariance" title="Link to this definition">¶</a></dt>
+<dd><p>Add <code class="docutils literal notranslate"><span class="pre">COVARIANCE_RIDGE</span></code> times each parameter’s own variance to the diagonal of a covariance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cov</strong> (<em>ndarray</em>) – (d, d) covariance.</p></li>
+<li><p><strong>fallback_variances</strong> (<em>ndarray</em><em> | </em><em>None</em>) – (d,) scale for a parameter whose variance is not positive and finite; else unit scale.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(d, d) float64 covariance with the ridge added.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.uni_normal_fit">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">uni_normal_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.uni_normal_fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fit a univariate normal to parameter <cite>param_index</cite> of each of the first <cite>max_num_sources</cite> slots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples; NaN values are left out.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of leading slots to fit, at most S.</p></li>
+<li><p><strong>param_index</strong> (<em>int</em>) – parameter to fit.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(means, stds), each (max_num_sources,), stds with ddof=1; a slot below <code class="docutils literal notranslate"><span class="pre">MIN_UNIVARIATE_SAMPLES</span></code> values
+takes the pooled parameter, and a zero std becomes <code class="docutils literal notranslate"><span class="pre">sqrt(COVARIANCE_RIDGE)</span></code> times the pooled std (or 1).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[<em>ndarray</em>, <em>ndarray</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.fits.uni_normal_log_prob">
+<span class="sig-prename descclassname"><span class="pre">petra.fits.</span></span><span class="sig-name descname"><span class="pre">uni_normal_log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.fits.uni_normal_log_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Return the univariate normal log-density of parameter <cite>param_index</cite> of every row under each selected fit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample</strong> (<em>ndarray</em>) – (S, P) rows.</p></li>
+<li><p><strong>aux_parameters</strong> (<em>tuple</em><em>[</em><em>ndarray</em><em>, </em><em>ndarray</em><em>]</em>) – (means, stds) as <cite>uni_normal_fit</cite> returns them.</p></li>
+<li><p><strong>source_index</strong> (<em>int</em><em> | </em><em>Sequence</em><em>[</em><em>int</em><em>] </em><em>| </em><em>ndarray</em>) – one fit index or several.</p></li>
+<li><p><strong>param_index</strong> (<em>int</em>) – parameter to score.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(L, S) log-densities for L selected fits, or (S,) when L is 1.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – a selected std is not strictly positive and finite.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p id="module-petra.utils">Dependency-light helpers shared by every petra module: argument checks, source presence and the uniform prior.</p>
+<p>Only numpy is imported at module scope, so <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">petra</span></code> stays free of jax. <code class="xref py py-data docutils literal notranslate"><span class="pre">logger</span></code> is the package
+logger <code class="docutils literal notranslate"><span class="pre">petra</span></code>, with a NullHandler: petra prints nothing unless the application configures logging.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="petra.utils.UniformPrior">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">UniformPrior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mins</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.UniformPrior" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Uniform density over a hyper-rectangle; zero-width dimensions are dropped with a warning.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mins</strong> (<em>_Buffer</em><em> | </em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>] </em><em>| </em><em>_NestedSequence</em><em>[</em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>]</em><em>] </em><em>| </em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em> | </em><em>_NestedSequence</em><em>[</em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em>]</em>) – (n_params,) lower bounds.</p></li>
+<li><p><strong>maxs</strong> (<em>_Buffer</em><em> | </em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>] </em><em>| </em><em>_NestedSequence</em><em>[</em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>]</em><em>] </em><em>| </em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em> | </em><em>_NestedSequence</em><em>[</em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em>]</em>) – (n_params,) upper bounds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – the bounds are not finite 1-D arrays of one length, maxs &lt; mins somewhere, or every width is 0.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="petra.utils.UniformPrior.log_prob">
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.UniformPrior.log_prob" title="Link to this definition">¶</a></dt>
+<dd><p>Return the log density at one point or a batch: <cite>log_density</cite> inside the support, -inf outside or at NaN.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sample</strong> (<em>_Buffer</em><em> | </em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>] </em><em>| </em><em>_NestedSequence</em><em>[</em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>]</em><em>] </em><em>| </em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em> | </em><em>_NestedSequence</em><em>[</em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em>]</em>) – (n_params,) point or (n_points, n_params) batch.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a scalar for a 1-D sample, shape (n_points,) for a 2-D one.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>jax array</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – sample is not 1-D or 2-D, or its last axis is not n_params long.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="petra.utils.UniformPrior.n_params">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#petra.utils.UniformPrior.n_params" title="Link to this definition">¶</a></dt>
+<dd><p>Number of dimensions the prior is defined over.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.check_eps">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">check_eps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eps</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.check_eps" title="Link to this definition">¶</a></dt>
+<dd><p>Require a finite probability clip bound with <code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">&lt;=</span> <span class="pre">eps</span> <span class="pre">&lt;=</span> <span class="pre">0.5</span></code>; eps=0 means unclipped.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>eps</strong> (<em>Any</em>) – candidate clip bound.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – eps is not finite or lies outside [0, 0.5].</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.check_int">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">check_int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minimum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.check_int" title="Link to this definition">¶</a></dt>
+<dd><p>Return <cite>value</cite> as a builtin int, refusing a bool, a non-integer or a value below <cite>minimum</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – argument name, quoted in the error.</p></li>
+<li><p><strong>value</strong> (<em>Any</em>) – candidate; an int or NumPy integer.</p></li>
+<li><p><strong>minimum</strong> (<em>int</em>) – smallest accepted value.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><cite>value</cite> as an int.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – <cite>value</cite> is a bool, not an integer, or below <cite>minimum</cite>.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.check_shuffle_seed">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">check_shuffle_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shuffle_seed</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.check_shuffle_seed" title="Link to this definition">¶</a></dt>
+<dd><p>Refuse a <cite>shuffle_seed</cite> that is not None or a non-negative integer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shuffle_seed</strong> (<em>Any</em>) – the <cite>shuffle_seed</cite> argument of an entry point.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>TypeError</strong> – it is a bool, a numpy.random.Generator or not an integer.</p></li>
+<li><p><strong>ValueError</strong> – it is a negative integer.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.find_prob_in_model">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">find_prob_in_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_num_sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.find_prob_in_model" title="Link to this definition">¶</a></dt>
+<dd><p>Return each leading slot’s share of samples with a present row, clipped to [eps, 1 - eps].</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples; an all-NaN row is absent.</p></li>
+<li><p><strong>max_num_sources</strong> (<em>int</em>) – number of leading slots to report, at most S.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – clip bound in [0, 0.5].</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(max_num_sources,) float64 array.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – eps out of range, or max_num_sources above S.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.make_uniform_prior">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">make_uniform_prior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chain</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.make_uniform_prior" title="Link to this definition">¶</a></dt>
+<dd><p>Build a <a class="reference internal" href="#petra.utils.UniformPrior" title="petra.utils.UniformPrior"><code class="xref py py-class docutils literal notranslate"><span class="pre">UniformPrior</span></code></a> over the per-parameter range of a chain, ignoring NaN.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>chain</strong> (<em>ndarray</em>) – (N, S, P) samples.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the prior over [min, max] of each parameter across every sample and source.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – a parameter is NaN in every entry, so it has no bounds.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#petra.utils.UniformPrior" title="petra.utils.UniformPrior"><em>UniformPrior</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="petra.utils.source_present">
+<span class="sig-prename descclassname"><span class="pre">petra.utils.</span></span><span class="sig-name descname"><span class="pre">source_present</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#petra.utils.source_present" title="Link to this definition">¶</a></dt>
+<dd><p>Return which source rows are present: a row is present only when none of its values is NaN.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source_data</strong> (<em>_Buffer</em><em> | </em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>] </em><em>| </em><em>_NestedSequence</em><em>[</em><em>_SupportsArray</em><em>[</em><em>dtype</em><em>[</em><em>Any</em><em>]</em><em>]</em><em>] </em><em>| </em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em> | </em><em>_NestedSequence</em><em>[</em><em>complex</em><em> | </em><em>bytes</em><em> | </em><em>str</em><em>]</em>) – array whose last axis is the parameter axis; leading axes are kept.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool array with the last axis reduced away; a row mixing NaN and numbers is absent.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">petra_catalogs</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">petra-catalogs API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-petra">Public package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-petra.make_catalog">Catalog entry points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-petra.posterior_chain">Chains and sample loading</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-petra.initialization">Relabeling internals</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="previous chapter">petra-catalogs documentation</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Aaron D. Johnson, Javier Roulet, Katerina Chatziioannou, Michele Vallisneri, Kyle Gersbach, Chris Trejo.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/modules.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
