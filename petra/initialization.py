@@ -1,6 +1,6 @@
 """Warm starts for the relabelers: the frequency-histogram labeling and the univariate-normal relabeling.
 
-`run_initialization_passes` is the shared preamble of the Bayesian and copula entry points; it takes both relabelers
+`run_initialization_passes` is the preamble of the copula entry point; it takes both relabelers
 as arguments, so each entry point's own namespace is where a pass can be substituted.
 """
 

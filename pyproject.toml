@@ -38,7 +38,7 @@ dependencies = [
     # Arrow 22+ provides Python 3.14 wheels; retain older compatible releases
     # for existing environments while allowing the current stable series.
     "pyarrow>=21.0.0,<26",
-    # Progress bars in petra.relabel and petra.bayesian_gaussian.
+    # Progress bars in petra.relabel.
     "tqdm>=4.67.1,<5",
 
     # Coppuccino-backed normalizing flows in petra.copula_flows.

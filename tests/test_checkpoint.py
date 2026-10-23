@@ -18,7 +18,6 @@ import pytest
 import petra
 from petra import checkpoint as checkpoint_module
 from petra import make_catalog
-from petra.bayesian_gaussian import bayesian_relabel_loop
 from petra.checkpoint import (
     CHECKPOINT_METADATA_KEY,
     CHECKPOINT_TEMPLATE,
@@ -454,18 +453,6 @@ RESUME_CASES = {
         lambda directory: relabel_univariate_normal(two_parameter_chain(), 2, num_iterations=5, init_parameter_index=1,
                                                     resume_from=directory, progress=False),
         ["'init_parameter_index': 0", "'init_parameter_index': 1"]),
-    "niw-kappa0": (
-        lambda directory: bayesian_relabel_loop(helpers.two_cluster_chain(), 2, num_iterations=1,
-                                                checkpoint_dir=directory, progress=False),
-        lambda directory: bayesian_relabel_loop(helpers.two_cluster_chain(), 2, num_iterations=5, kappa0=0.1,
-                                                resume_from=directory, progress=False),
-        ["'kappa0': 0.01", "'kappa0': 0.1"]),
-    "niw-nu0-5-and-5.0": (
-        lambda directory: bayesian_relabel_loop(helpers.two_cluster_chain(), 2, num_iterations=1, nu0=5,
-                                                checkpoint_dir=directory, progress=False),
-        lambda directory: bayesian_relabel_loop(helpers.two_cluster_chain(), 2, num_iterations=5, nu0=5.0,
-                                                resume_from=directory, progress=False),
-        None),
     "progress-split-moves-run-info": (
         mv_writer(), mv_resume(progress=True, split_moves=True, run_info={"entry_point": "another"}), None),
 }

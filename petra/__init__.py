@@ -1,6 +1,6 @@
 """petra: from the LISA global fit to catalogs of single sources.
 
-The public entry points are the three ``make_catalog_*`` relabelers, :func:`load_samples` and :class:`PosteriorChain`.
+The public entry points are the two ``make_catalog_*`` relabelers, :func:`load_samples` and :class:`PosteriorChain`.
 ``import petra`` is cheap: the entry points are resolved on first access (PEP 562), so jax is not imported until a
 flow method is used. The package is typed (``py.typed``), and the lazy names are also imported under
 ``TYPE_CHECKING`` so a type checker sees their real signatures.
@@ -23,11 +23,9 @@ from .samples_io import load_samples  # noqa: E402
 _LAZY_ATTRS = {
     "make_catalog_mv_normal": "petra.make_catalog",
     "make_catalog_copula_flows": "petra.copula_flows",
-    "make_catalog_bayesian_gaussian": "petra.bayesian_gaussian",
 }
 
 if TYPE_CHECKING:  # pragma: no cover - read by type checkers, never executed
-    from .bayesian_gaussian import make_catalog_bayesian_gaussian
     from .copula_flows import make_catalog_copula_flows
     from .make_catalog import make_catalog_mv_normal
 
@@ -36,7 +34,6 @@ __all__ = [
     "load_samples",
     "make_catalog_mv_normal",
     "make_catalog_copula_flows",
-    "make_catalog_bayesian_gaussian",
     "__version__",
 ]
 

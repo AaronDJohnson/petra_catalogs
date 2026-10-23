@@ -103,10 +103,9 @@ return a relabeled `PosteriorChain`.
 | Entry point | Source model | Suggested use |
 | --- | --- | --- |
 | `make_catalog_mv_normal` | Multivariate Gaussian | Fast default for separated, roughly Gaussian sources. |
-| `make_catalog_bayesian_gaussian` | Normal-inverse-Wishart posterior predictive | Regularized Gaussian fit for sparse slots or near-degenerate covariances. |
 | `make_catalog_copula_flows` | Copula transform plus normalizing flow, fitted by `coppuccino` | Non-Gaussian dependence with well-behaved marginals. |
 
-The Gaussian methods are inexpensive. Each flow iteration trains a model for
+The Gaussian method is inexpensive. Each flow iteration trains a model for
 every populated source slot, so use smaller iteration and training budgets when
 exploring a dataset.
 
@@ -157,13 +156,13 @@ they can still stop with two sources in one label, or with the slots
 
 ## Flow and initialization settings
 
-The copula-flow and Bayesian Gaussian entry points take their settings as
-keyword arguments, each checked before any work:
+The copula-flow entry point takes its settings as keyword arguments, each
+checked before any work:
 
 | Keywords | Configure | Used by |
 | --- | --- | --- |
 | `knots`, `flow_layers`, `max_epochs`, `max_patience`, `learning_rate`, `log_prob_floor` | Copula-flow construction and training | `make_catalog_copula_flows` |
-| `init_with_mv_normal`, `init_num_iterations` | The optional multivariate Gaussian initialization, and the iteration ceiling of each initialization pass | `make_catalog_copula_flows` and `make_catalog_bayesian_gaussian` |
+| `init_with_mv_normal`, `init_num_iterations` | The optional multivariate Gaussian initialization, and the iteration ceiling of each initialization pass | `make_catalog_copula_flows` |
 
 ```python
 catalog = petra.make_catalog_copula_flows(
@@ -189,6 +188,12 @@ These notes compare the development tree with 1.1.
 
 ### Removed
 
+- `make_catalog_bayesian_gaussian` and the module `petra.bayesian_gaussian`.
+  Its normal-inverse-Wishart prior took its scale from the spread between
+  sources, so its predictive was far wider than the posteriors (41x in
+  frequency on the bundled LISA example) and it moved rows into worse slots;
+  with the prior corrected it reproduced the `make_catalog_mv_normal`
+  catalog, so it added nothing.
 - The modules `petra.options`, `petra.parametric_fits`,
   `petra.aux_distributions`, `petra.cost_matrix` and `petra.flow_utils`. The
   fits, log-probabilities and the cost matrix now live in `petra.fits`, and
@@ -240,7 +245,7 @@ end.
 ### Added
 
 - Two catalog methods: `make_catalog_bayesian_gaussian`, a
-  normal-inverse-Wishart posterior predictive, and `make_catalog_copula_flows`,
+  normal-inverse-Wishart posterior predictive (removed since), and `make_catalog_copula_flows`,
   a copula transform plus a normalizing flow fitted by `coppuccino`. Both are
   exported from `petra`, together with their settings objects
   `petra.Initialization` and `petra.CopulaFlowFit` (removed since; see

@@ -506,7 +506,7 @@ def test_eps_reaches_every_cost_matrix_of_both_passes(monkeypatch):
     for name, arrays in seen.items():
         for prob_in_model in arrays:
             assert prob_in_model.min() == eps and prob_in_model.max() == 1.0 - eps, name
-    for entry_point in (make_catalog_mv_normal, petra.make_catalog_bayesian_gaussian, petra.make_catalog_copula_flows):
+    for entry_point in (make_catalog_mv_normal, petra.make_catalog_copula_flows):
         assert inspect.signature(entry_point).parameters["eps"].default == 1e-06
 
 
@@ -598,9 +598,9 @@ def test_load_samples_to_catalog_to_feather_journey(tmp_path):
 
 
 def test_the_public_surface_signatures_and_packaging(monkeypatch):
-    """The package exports six names lazily and typed, with flat signatures, Path-typed paths and a pinned backend."""
+    """The package exports five names lazily and typed, with flat signatures, Path-typed paths and a pinned backend."""
     assert petra.__all__ == ["PosteriorChain", "load_samples", "make_catalog_mv_normal", "make_catalog_copula_flows",
-                             "make_catalog_bayesian_gaussian", "__version__"]
+                             "__version__"]
     saved = {name: petra.__dict__.get(name) for name in petra._LAZY_ATTRS}
     try:
         for name in petra._LAZY_ATTRS:

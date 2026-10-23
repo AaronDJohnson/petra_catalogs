@@ -13,9 +13,6 @@ Catalog entry points
 .. automodule:: petra.make_catalog
    :members:
 
-.. automodule:: petra.bayesian_gaussian
-   :members:
-
 .. automodule:: petra.copula_flows
    :members:
 
