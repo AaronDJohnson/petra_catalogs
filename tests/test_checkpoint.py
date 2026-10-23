@@ -354,7 +354,9 @@ def test_resume_continues_to_the_uninterrupted_result(tmp_path, case_a_uninterru
         resumed = mv(case_a_chain(), 4, num_iterations=8, resume_from=resume_from, checkpoint_dir=checkpoint_dir)
 
     assert np.array_equal(resumed.get_chain(), case_a_uninterrupted.get_chain(), equal_nan=True)
-    assert resumed.cost_dict == case_a_uninterrupted.cost_dict == {4: REF["resume"]["full_cost"]["4"]}
+    assert resumed.cost_dict == case_a_uninterrupted.cost_dict
+    # The reference was produced on macOS; Linux BLAS lands within a few ulps of it.
+    assert resumed.cost_dict[4] == pytest.approx(REF["resume"]["full_cost"]["4"], rel=0, abs=1e-12)
 
 
 def stopped_run(directory: Path):
