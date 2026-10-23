@@ -1,916 +1,706 @@
-"""
-The shared relabeling loop: fit, cost matrix, Hungarian assignment, repeat.
+"""The shared relabeling loop: fit, assign every sample with the Hungarian algorithm, keep the cheapest labeling.
 
-This module is the engine every relabeling method in :mod:`petra` is built on.
-A method is defined by two callables -- a *parametric fit*
-``(chain, max_num_sources) -> aux_parameters`` and an *auxiliary distribution*
-``(sample, aux_parameters, indices) -> log_pdf`` -- and
-:func:`create_relabel_samples` turns that pair into a full relabeler.  Nothing
-here knows what the auxiliary distributions are; adding a method means adding a
-fit and a distribution, not another loop.
-
-Conventions
------------
-Chains are ``(n_samples, n_sources, n_params_per_source)`` and ``NaN`` means
-"this source is absent from this sample"; see :mod:`petra.posterior_chain`.
-
-*Cost is negated log-likelihood, so lower is better.*
-:func:`relabel_samples_one_iteration` maximizes the log-density sum with
-:func:`scipy.optimize.linear_sum_assignment` and returns minus that sum averaged
-over samples.  Every ``cost_dict`` entry written here follows that sign, and the
-loop in :func:`create_relabel_samples` keeps the *cheapest* labeling it has seen
-and reverts to it as soon as the cost goes back up, so a relabeler never returns
-a labeling worse than its best.
-
-Relabeling is always non-destructive: no function in this module modifies the
-chain, the ``cost_dict`` or any other attribute of the
-:class:`~petra.posterior_chain.PosteriorChain` it is handed.
-
-*A returned chain's ``prob_in_model`` always describes that chain.*
-:func:`run_relabeling_loop` recomputes it from the labeling it is about to hand
-back, with no ``eps`` clipping, so that
-``find_prob_in_model(result.get_chain(), n, eps=0)`` reproduces
-``result.prob_in_model`` exactly.  ``eps`` clips only the copy fed to the cost
-matrix during iteration, where a probability of exactly 0 or 1 would make a
-``log`` term infinite; see the Notes of :func:`run_relabeling_loop`.
-
-Progress bars are controlled by the shared ``progress`` keyword (default
-``True``) and all diagnostics go to ``logging.getLogger("petra.relabel")``;
-nothing here prints.
+A method is a fit and a cost matrix; cost is negated log-likelihood, so lower is better. With ``split_moves`` the loop
+first tries, wherever it would stop, to split a label holding two clusters into a sparse one. Inputs are never modified.
 """
 
+import logging
+import math
 import os
-import re
-from dataclasses import replace
-from typing import Any, Callable, Optional
+import warnings
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from scipy import optimize
 from tqdm import tqdm
 
-from petra.utils import _validate_eps, fill_missing_indices, find_prob_in_model, get_logger
-from petra.options import _check_at_least_one
+from petra.checkpoint import Checkpoint, load_checkpoint, prepare_checkpoint_dir, run_fingerprint, write_checkpoint
 from petra.posterior_chain import PosteriorChain
-from petra.parametric_fits import (FitFunction, update_parametric_fit_and_prob_in_model,
-                                   create_parametric_fit)
-from petra.cost_matrix import create_compute_cost_matrix
+from petra.utils import check_eps, check_int, check_shuffle_seed, find_prob_in_model, source_present
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
-#: Filename pattern used for the per-iteration checkpoints written by
-#: ``relabel_samples(..., checkpoint_dir=...)`` and understood by
-#: :func:`find_latest_checkpoint`.
-CHECKPOINT_TEMPLATE = "posterior_chain_iteration_{iteration:03d}.feather"
-_CHECKPOINT_RE = re.compile(r"^posterior_chain_iteration_(\d+)\.feather$")
+FitFunction = Callable[[np.ndarray, int], Any]
+
+_STOP_REASONS = {"converged": "its cost did not change",
+                 "cost increased": "its cost increased"}
+_SPLIT_CANDIDATES = 3
+_SPLIT_EVALUATION_ITERATIONS = 10
+_TWO_MEANS_ITERATIONS = 20
+# One normal cloud of 200 or more rows measures 3.3-4.4, two normal clusters 4.3 standard deviations apart 4.5.
+_SPLIT_MIN_SEPARATION = 4.5
+# A tenth of the samples two independent sources would share; fewer is one source with two modes.
+_SPLIT_MIN_TOGETHER = 0.1
+_BLOCK_ROWS = 1 << 18
 
 
-def _validate_relabel_settings(num_iterations: int, eps: float) -> None:
-    """Check iteration and clipping settings before fitting or initialization."""
-    _check_at_least_one("num_iterations", num_iterations)
-    _validate_eps(eps)
+def check_chain(posterior_chain: Any, max_num_sources: Any = None, *, required: bool = False) -> int:
+    """Check a relabeler's chain and target width before any work, and return the width.
 
+    Parameters:
+        posterior_chain: the chain argument; a PosteriorChain holding at least one sample.
+        max_num_sources: number of source slots, at least the chain's; None means the chain's own width.
+        required: refuse None for max_num_sources.
 
-def prepare_chain(posterior_chain: PosteriorChain,
-                  max_num_sources: int | None = None,
-                  shuffle_seed: int | None = None) -> PosteriorChain:
+    Returns:
+        the width as an int.
+
+    Raises:
+        TypeError: posterior_chain is not a PosteriorChain.
+        ValueError: the chain holds no samples, or max_num_sources is not an integer >= 1 or is below the chain's width.
     """
-    Validate, optionally shuffle, and widen a chain before relabeling.
-
-    Every ``make_catalog_*`` entry point needs the same preamble, and
-    :meth:`PosteriorChain.expand_chain` is *not* in-place -- it returns a new
-    object -- so calling it for effect silently does nothing.  This helper is
-    the single implementation.
-
-    Parameters
-    ----------
-    posterior_chain : PosteriorChain
-        Chain to prepare.  Never modified in place.
-    max_num_sources : int, optional
-        Target number of source slots.  Defaults to
-        ``posterior_chain.num_sources``.
-    shuffle_seed : int, optional
-        If given, entries are shuffled per sample with this seed *before* the
-        chain is widened, so that the NaN padding is not shuffled in.
-
-    Returns
-    -------
-    PosteriorChain
-        Chain with exactly `max_num_sources` source slots.  This may be the
-        input object itself when no shuffling or widening was required.  When
-        either step did run, the returned chain's ``prob_in_model`` is
-        re-derived from its own samples and its ``cost_dict`` is empty: both
-        describe a labeling that shuffling replaced and widening changed the
-        width of.  ``validate_nan_convention`` is inherited, so a chain the
-        caller opted out for is not re-checked here.
-
-    Raises
-    ------
-    ValueError
-        If `max_num_sources` is smaller than ``posterior_chain.num_sources``;
-        the chain would have to lose sources, which is never intended.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> pc = PosteriorChain(np.random.randn(10, 2, 3), 2, 3)
-    >>> prepare_chain(pc, 4).chain.shape
-    (10, 4, 3)
-    >>> prepare_chain(pc, 2) is pc
-    True
-    >>> prepare_chain(pc, 1)
-    Traceback (most recent call last):
-        ...
-    ValueError: max_num_sources (1) cannot be less than the number of entries in the chain (2).
-    """
-    if max_num_sources is None:
-        max_num_sources = posterior_chain.num_sources
+    if not isinstance(posterior_chain, PosteriorChain):
+        kind = type(posterior_chain)
+        raise TypeError(
+            f"posterior_chain must be a petra.PosteriorChain, got {kind.__module__}.{kind.__qualname__}. "
+            f"Wrap an array as PosteriorChain(chain, num_sources, num_params_per_source), or load "
+            f"one with petra.load_samples."
+        )
+    if posterior_chain.shape[0] == 0:
+        raise ValueError(
+            f"posterior_chain holds no samples (shape {posterior_chain.shape}), so there is nothing "
+            f"to relabel. If it was loaded or sliced with a burn or thin, they removed every sample."
+        )
+    if max_num_sources is None and not required:
+        return int(posterior_chain.num_sources)
+    max_num_sources = check_int("max_num_sources", max_num_sources)
     if max_num_sources < posterior_chain.num_sources:
         raise ValueError(
             f"max_num_sources ({max_num_sources}) cannot be less than the number of "
             f"entries in the chain ({posterior_chain.num_sources})."
         )
+    return max_num_sources
 
-    if shuffle_seed is not None:
+
+def prepare_chain(posterior_chain: PosteriorChain,
+                  max_num_sources: int | None = None,
+                  shuffle_seed: int | None = None,
+                  *,
+                  widen_first: bool = False) -> PosteriorChain:
+    """Check, widen and optionally shuffle a chain before relabeling.
+
+    Parameters:
+        posterior_chain: the chain to prepare; never modified.
+        max_num_sources: number of source slots, at least the chain's; None means the chain's own width.
+        shuffle_seed: None not to shuffle, or a non-negative integer seed for a per-sample shuffle of the slots.
+        widen_first: widen before shuffling, spreading the padding over every slot; otherwise added slots start empty.
+
+    Returns:
+        the input itself when there is nothing to do; otherwise a new chain with prob_in_model re-derived from it,
+        an empty cost_dict and the input's validate_nan_convention.
+
+    Raises:
+        TypeError: posterior_chain is not a PosteriorChain, or shuffle_seed is not None or an integer.
+        ValueError: the chain holds no samples, max_num_sources is invalid, or shuffle_seed is negative.
+    """
+    max_num_sources = check_chain(posterior_chain, max_num_sources)
+    check_shuffle_seed(shuffle_seed)
+
+    def shuffle(chain: PosteriorChain) -> PosteriorChain:
+        if shuffle_seed is None:
+            return chain
         logger.info("Shuffling chain entries with seed %s.", shuffle_seed)
-        posterior_chain = posterior_chain.randomize_entries(shuffle_seed)
+        return chain.randomize_entries(shuffle_seed)
+
+    if not widen_first:
+        posterior_chain = shuffle(posterior_chain)
 
     if max_num_sources > posterior_chain.num_sources:
         logger.info("Expanding posterior chain from %d to %d source slots.",
                     posterior_chain.num_sources, max_num_sources)
         posterior_chain = posterior_chain.expand_chain(max_num_sources)
 
+    if widen_first:
+        posterior_chain = shuffle(posterior_chain)
+
     return posterior_chain
-
-
-def _checkpoint_posterior_chain(posterior_chain: PosteriorChain, checkpoint_dir: str, iteration: int) -> str:
-    """
-    Save a PosteriorChain to disk as a checkpoint.
-
-    Parameters
-    ----------
-    posterior_chain : PosteriorChain
-        The chain to save, with the ``prob_in_model`` and ``cost_dict`` a
-        resumed run will need; :meth:`PosteriorChain.to_feather` persists both.
-    checkpoint_dir : str
-        Directory to save checkpoints in
-    iteration : int
-        Number of completed iterations (used in the filename)
-
-    Returns
-    -------
-    filepath : str
-        Path the checkpoint was written to.
-
-    """
-    # Create directory if it doesn't exist
-    os.makedirs(checkpoint_dir, exist_ok=True)
-
-    # Create filename with iteration number
-    filename = CHECKPOINT_TEMPLATE.format(iteration=iteration)
-    filepath = os.path.join(checkpoint_dir, filename)
-
-    # Save the chain
-    posterior_chain.to_feather(filepath)
-    logger.info("  Checkpoint saved: %s", filepath)
-    return filepath
-
-
-def find_latest_checkpoint(checkpoint_dir: str) -> tuple[str, int] | None:
-    """
-    Locate the most advanced checkpoint written into a directory.
-
-    Parameters
-    ----------
-    checkpoint_dir : str
-        Directory previously passed as ``checkpoint_dir`` to a relabeler.
-
-    Returns
-    -------
-    latest : tuple of (str, int) or None
-        Path of the highest-numbered checkpoint and the number of completed
-        iterations it represents, or ``None`` if the directory does not exist
-        or holds no checkpoint.
-
-    Examples
-    --------
-    >>> find_latest_checkpoint('/no/such/directory') is None
-    True
-    """
-    if not os.path.isdir(checkpoint_dir):
-        return None
-    found = []
-    for filename in os.listdir(checkpoint_dir):
-        match = _CHECKPOINT_RE.match(filename)
-        if match is not None:
-            found.append((int(match.group(1)), filename))
-    if not found:
-        return None
-    iteration, filename = max(found)
-    return os.path.join(checkpoint_dir, filename), iteration
-
-
-def load_checkpoint(resume_from: str) -> tuple[PosteriorChain, int]:
-    """
-    Load a relabeling checkpoint written by ``relabel_samples``.
-
-    Parameters
-    ----------
-    resume_from : str
-        Either a checkpoint file written by
-        :func:`_checkpoint_posterior_chain`, or a directory holding such files,
-        in which case the highest-numbered one is used.
-
-    Returns
-    -------
-    posterior_chain : PosteriorChain
-        The checkpointed chain.
-    completed_iterations : int
-        Number of relabeling iterations already completed, parsed from the
-        filename; ``0`` if the name does not follow `CHECKPOINT_TEMPLATE`.
-
-    Raises
-    ------
-    FileNotFoundError
-        If `resume_from` is neither a checkpoint file nor a directory holding
-        one.
-
-    Notes
-    -----
-    The chain, its ``prob_in_model`` and its ``cost_dict`` all survive the round
-    trip: :meth:`PosteriorChain.to_feather` writes all three into the Feather
-    schema metadata.  A resumed run therefore knows what the labeling it is
-    resuming from cost, and :func:`run_relabeling_loop` takes that cost as the
-    one to beat.  Only files in the legacy column layout, written before that
-    metadata existed, come back with an empty ``cost_dict``; a run resumed from
-    one of those has nothing to compare against and behaves like a fresh run.
-
-    Examples
-    --------
-    >>> import os
-    >>> import tempfile
-    >>> import numpy as np
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> pc = PosteriorChain(np.zeros((4, 2, 1)), 2, 1,
-    ...                     prob_in_model=np.array([1.0, 0.0]), cost_dict={2: -3.5})
-    >>> with tempfile.TemporaryDirectory() as tmpdir:
-    ...     _ = _checkpoint_posterior_chain(pc, tmpdir, 7)
-    ...     restored, completed = load_checkpoint(tmpdir)
-    >>> completed, restored.cost_dict, restored.prob_in_model
-    (7, {2: -3.5}, array([1., 0.]))
-    """
-    if os.path.isdir(resume_from):
-        latest = find_latest_checkpoint(resume_from)
-        if latest is None:
-            raise FileNotFoundError(f"No relabeling checkpoint found in {resume_from!r}.")
-        filepath, completed_iterations = latest
-    elif os.path.isfile(resume_from):
-        filepath = resume_from
-        match = _CHECKPOINT_RE.match(os.path.basename(resume_from))
-        completed_iterations = int(match.group(1)) if match is not None else 0
-    else:
-        raise FileNotFoundError(f"No such checkpoint file or directory: {resume_from!r}.")
-
-    return PosteriorChain.read_feather(filepath), completed_iterations
 
 
 def relabel_samples_one_iteration(chain: np.ndarray,
                                   aux_parameters: Any,
                                   prob_in_model: np.ndarray,
                                   max_num_sources: int,
-                                  compute_cost_matrix: Callable,
+                                  compute_cost_matrix: Callable[..., np.ndarray],
                                   progress: bool = True) -> tuple[np.ndarray, float]:
-    """
-    Perform one iteration of label assignment using the Hungarian algorithm.
+    """Assign each sample's rows to labels with the Hungarian algorithm under one fit.
 
-    Parameters
-    ----------
-    chain : ndarray, shape (n_samples, n_sources, n_params_per_source)
-        Posterior samples to relabel.
-    aux_parameters : object
-        Parameters (e.g. means and covariances) returned by a parametric fit,
-        passed straight through to `compute_cost_matrix`.
-    prob_in_model : ndarray, shape (max_num_sources,)
-        Probability each source is present in the model.
-    max_num_sources : int
-        Maximum number of sources to consider in assignment.  May be smaller
-        than ``chain.shape[1]``, in which case the surplus source slots keep
-        their own labels; see Notes.
-    compute_cost_matrix : callable
-        Function with signature
-        `(sample, aux_parameters, prob_in_model, max_num_sources) -> cost_matrix`,
-        returning an array of shape ``(max_num_sources, n_sources)``.
-    progress : bool, default True
-        Show a tqdm progress bar over the samples.
+    Parameters:
+        chain: (N, S, P) samples.
+        aux_parameters: the fit, passed to compute_cost_matrix unchanged.
+        prob_in_model: (K,) inclusion probabilities fed to the cost matrix.
+        max_num_sources: number of labels K, at most S; slots no label is assigned follow in their own order.
+        compute_cost_matrix: ``(sample, aux_parameters, prob_in_model, K)`` giving the (K, S) rewards to maximize.
+        progress: show a progress bar over the samples.
 
-    Returns
-    -------
-    relabeled_chain : ndarray, shape (n_samples, n_sources, n_params_per_source)
-        Samples reordered according to optimal assignments.
-    cost : float
-        Average assignment cost over all samples.  This is *minus* the average
-        of the maximized log-density sum, so lower is better.
-
-    Notes
-    -----
-    :func:`scipy.optimize.linear_sum_assignment` returns one column per *row*
-    of the cost matrix, i.e. ``max_num_sources`` entries, whereas reordering a
-    sample needs a permutation of all ``chain.shape[1]`` slots.  When the two
-    agree -- the case for every relabeler built by
-    :func:`create_relabel_samples`, since
-    :func:`prepare_chain` widens the chain to ``max_num_sources`` first --
-    ``col_ind`` is already a full permutation and
-    :func:`petra.utils.fill_missing_indices` returns it unchanged.  When
-    `max_num_sources` is smaller, it is load-bearing: without it the
-    unassigned slots would be dropped and the returned chain would silently
-    lose sources.
-
-    That narrower case is supported *here*, on a bare array, and not by
-    :func:`relabel_posterior_chain_one_iteration` one layer up.  The difference
-    is not an oversight: this function returns samples and a number, whereas the
-    wrapper returns a :class:`~petra.posterior_chain.PosteriorChain`, which
-    carries a ``prob_in_model`` of one entry per source slot and a ``cost_dict``
-    keyed by source count.  With fewer auxiliary distributions than slots there
-    is no value either field could take for the slots the assignment never
-    looked at, so the wrapper requires the two to agree and says so.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.aux_distributions import mv_normal_aux_distribution
-    >>> from petra.cost_matrix import create_compute_cost_matrix
-    >>> from petra.parametric_fits import create_parametric_fit, mv_normal_fit
-    >>> from petra.utils import find_prob_in_model
-    >>> rng = np.random.default_rng(0)
-    >>> chain = rng.normal(size=(20, 2, 1)) + np.array([[0.0], [5.0]])
-    >>> aux_params = create_parametric_fit(mv_normal_fit)(chain, max_num_sources=2)
-    >>> prob = find_prob_in_model(chain, max_num_sources=2)
-    >>> compute_cost_matrix = create_compute_cost_matrix(mv_normal_aux_distribution)
-    >>> relabeled, cost = relabel_samples_one_iteration(
-    ...     chain, aux_params, prob, 2, compute_cost_matrix, progress=False)
-    >>> relabeled.shape
-    (20, 2, 1)
+    Returns:
+        the (N, S, P) relabeled samples, each a permutation of its own rows, and the cost: minus the mean maximized
+        reward sum, so lower is better.
     """
     relabeled_list = []
     total_cost = 0.0
     for sample in tqdm(chain, disable=not progress):
         cost_matrix = compute_cost_matrix(sample, aux_parameters, prob_in_model, max_num_sources)
-        total_entries = max(len(sample), max_num_sources)  # pick the larger of number of aux distributions or sample entries
-        row_ind, col_ind = optimize.linear_sum_assignment(cost_matrix, maximize=True)  # solve the linear sum assignment problem
+        total_entries = max(len(sample), max_num_sources)
+        row_ind, col_ind = optimize.linear_sum_assignment(cost_matrix, maximize=True)
         total_cost -= cost_matrix[row_ind, col_ind].sum()
-        # `col_ind` has one entry per aux distribution, not one per source slot.  When the
-        # chain is exactly `max_num_sources` wide -- the shared code path -- it is already a
-        # full permutation and this call is the identity.  When the chain is wider, the slots
-        # the assignment never looked at have to be appended, or they would be dropped from
-        # the reordering below and the chain would silently lose sources.  See the Notes.
-        relabeled_list.append(fill_missing_indices(total_entries, col_ind))
+        # `col_ind` has one entry per label, not per slot: a wider chain's unassigned slots are appended, or they
+        # would be dropped from the reordering and the chain would lose sources.
+        unassigned = np.ones(total_entries, dtype=bool)
+        unassigned[col_ind] = False
+        relabeled_list.append(np.concatenate([col_ind, np.flatnonzero(unassigned)]))
     relabeled_array = np.array(relabeled_list)
 
-    relabeled_samples = np.array([row[m] for row, m in zip(chain, relabeled_array)])  # reorder the original samples
+    relabeled_samples = np.array([row[m] for row, m in zip(chain, relabeled_array)])
     total_cost /= len(chain)
     return relabeled_samples, total_cost
 
 
-def relabel_posterior_chain_one_iteration(posterior_chain: PosteriorChain,
-                                          aux_parameters: Any,
-                                          prob_in_model: np.ndarray,
-                                          max_num_sources: int,
-                                          compute_cost_matrix: Callable,
-                                          progress: bool = True) -> PosteriorChain:
-    """
-    Perform one relabeling step on a PosteriorChain instance.
-
-    Parameters
-    ----------
-    posterior_chain : PosteriorChain
-        Object containing chain, metadata and previous cost dictionary.
-    aux_parameters : object
-        Parameters from a parametric fit (e.g. means and covariances).
-    prob_in_model : ndarray, shape (max_num_sources,)
-        Probability each source is present in the model.
-    max_num_sources : int
-        Number of sources for this iteration.  Must equal
-        ``posterior_chain.num_sources``; see Notes.
-    compute_cost_matrix : callable
-        Cost matrix builder function for each sample.
-    progress : bool, default True
-        Show a tqdm progress bar over the samples.
-
-    Returns
-    -------
-    new_chain : PosteriorChain
-        New PosteriorChain with the relabeled samples, the supplied
-        `prob_in_model`, and a *copy* of the input's ``cost_dict`` with this
-        iteration's cost recorded under ``cost_dict[max_num_sources]``.  The
-        caller's chain -- including its ``cost_dict`` -- is left untouched.
-        ``trans_dimensional`` and ``validate_nan_convention`` are inherited from
-        the input.
-
-    Raises
-    ------
-    ValueError
-        If `max_num_sources` is not ``posterior_chain.num_sources``.
-
-    Notes
-    -----
-    The ``prob_in_model`` on the returned chain is the array the cost matrix was
-    built from -- computed from the *pre*-relabel labeling and clipped -- not one
-    describing the samples that come back.  A caller handing this chain onward
-    owes it the correction :func:`run_relabeling_loop` applies; that is what
-    ``_with_unclipped_prob_in_model`` is for.
-
-    ``max_num_sources`` has to match the width of the chain, which is *narrower*
-    than what :func:`relabel_samples_one_iteration` accepts underneath.  That
-    function returns an array; this one returns a chain, and a chain carries a
-    ``prob_in_model`` of one entry per source slot.  Handing it the array the
-    cost matrix used -- ``max_num_sources`` entries -- attached to a chain that
-    is wider produces exactly the self-contradicting object
-    :class:`~petra.posterior_chain.PosteriorChain` exists to refuse, and there
-    is no honest value for the slots the assignment never scored: the caller
-    supplied none, and 0 would claim they are empty when they are not.  Relabel
-    a wider chain against fewer distributions through
-    :func:`relabel_samples_one_iteration` directly, which is what the narrower
-    contract is for.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.aux_distributions import mv_normal_aux_distribution
-    >>> from petra.cost_matrix import create_compute_cost_matrix
-    >>> from petra.parametric_fits import create_parametric_fit, mv_normal_fit
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> from petra.utils import find_prob_in_model
-    >>> rng = np.random.default_rng(0)
-    >>> chain = rng.normal(size=(20, 2, 1)) + np.array([[0.0], [5.0]])
-    >>> pc = PosteriorChain(chain, 2, 1, trans_dimensional=True)
-    >>> aux_params = create_parametric_fit(mv_normal_fit)(chain, max_num_sources=2)
-    >>> prob = find_prob_in_model(chain, max_num_sources=2)
-    >>> compute_cost_matrix = create_compute_cost_matrix(mv_normal_aux_distribution)
-    >>> new_pc = relabel_posterior_chain_one_iteration(
-    ...     pc, aux_params, prob, 2, compute_cost_matrix, progress=False)
-    >>> isinstance(new_pc, PosteriorChain)
-    True
-    >>> sorted(new_pc.cost_dict), pc.cost_dict   # the caller's dict is untouched
-    ([2], {})
-    >>> new_pc.trans_dimensional                 # and its metadata is preserved
-    True
-    >>> relabel_posterior_chain_one_iteration(pc, aux_params, prob[:1], 1,
-    ...                                       compute_cost_matrix, progress=False)
-    Traceback (most recent call last):
-        ...
-    ValueError: max_num_sources (1) must equal the chain's num_sources (2): the returned PosteriorChain carries one inclusion probability per source slot, and there is none to give the 1 slot the assignment never scored. Call relabel_samples_one_iteration on posterior_chain.get_chain() to relabel a wider chain against fewer distributions.
-    """
-    # Named here rather than left to PosteriorChain's own check further down, which
-    # reports a prob_in_model of the wrong shape without saying which argument chose
-    # that shape or that the layer beneath does support the mismatch.  See the Notes.
-    if max_num_sources != posterior_chain.num_sources:
-        raise ValueError(
-            f"max_num_sources ({max_num_sources}) must equal the chain's num_sources "
-            f"({posterior_chain.num_sources}): the returned PosteriorChain carries one "
-            f"inclusion probability per source slot, and there is none to give the "
-            f"{abs(posterior_chain.num_sources - max_num_sources)} slot"
-            f"{'' if abs(posterior_chain.num_sources - max_num_sources) == 1 else 's'} "
-            f"the assignment never scored. Call relabel_samples_one_iteration on "
-            f"posterior_chain.get_chain() to relabel a wider chain against fewer "
-            f"distributions."
-        )
-    # Copy: the caller's cost_dict must not be mutated by a relabeling run.
-    cost_dict = dict(posterior_chain.cost_dict)
-    relabeled_chain, total_cost = relabel_samples_one_iteration(
-        posterior_chain.get_chain(), aux_parameters, prob_in_model, max_num_sources,
-        compute_cost_matrix, progress=progress)
-    cost_dict[max_num_sources] = total_cost
-    # `validate_nan_convention` rides along: this rebuild happens once per iteration, so
-    # a chain the caller opted out for would otherwise be rejected on the first one, by
-    # the very message that told them to pass the flag.
-    return PosteriorChain(relabeled_chain,
-                          posterior_chain.num_sources,
-                          posterior_chain.num_params_per_source,
-                          trans_dimensional=posterior_chain.trans_dimensional,
-                          prob_in_model=prob_in_model,
-                          cost_dict=cost_dict,
-                          validate_nan_convention=posterior_chain.validate_nan_convention)
-
-
 def _with_unclipped_prob_in_model(posterior_chain: PosteriorChain,
                                   max_num_sources: int) -> PosteriorChain:
-    """
-    Re-derive a chain's ``prob_in_model`` from its own samples, without clipping.
+    """Return the chain with prob_in_model re-derived from its samples, unclipped; no copy or rescan, same settings."""
+    rebuilt = PosteriorChain(posterior_chain.chain,
+                             posterior_chain.num_sources,
+                             posterior_chain.num_params_per_source,
+                             trans_dimensional=posterior_chain.trans_dimensional,
+                             prob_in_model=find_prob_in_model(posterior_chain.get_chain(),
+                                                              max_num_sources, eps=0),
+                             cost_dict=dict(posterior_chain.cost_dict),
+                             copy=False,
+                             validate_nan_convention=False)
+    rebuilt.copy = posterior_chain.copy
+    rebuilt.validate_nan_convention = posterior_chain.validate_nan_convention
+    return rebuilt
 
-    A chain handed to a caller has to describe itself.  The array
-    :func:`relabel_posterior_chain_one_iteration` stores is the one the *cost
-    matrix* was built from: computed before the relabeling and clipped into
-    ``[eps, 1 - eps]``, so it is stale by one iteration and can never report a
-    source that is always -- or never -- present.
 
-    Parameters
-    ----------
-    posterior_chain : PosteriorChain
-        Chain whose ``prob_in_model`` is to be replaced.  Not modified: a new
-        instance is returned and every other field is carried over unchanged.
-    max_num_sources : int
-        Number of source slots to report a probability for.
+@dataclass(frozen=True)
+class _Labeling:
+    """A labeling the loop can continue from: the chain (unclipped prob_in_model), its fit, clipped probs and cost."""
 
-    Returns
-    -------
-    PosteriorChain
-        Copy of `posterior_chain` whose ``prob_in_model`` is
-        ``find_prob_in_model(posterior_chain.get_chain(), max_num_sources, eps=0)``.
+    chain: PosteriorChain
+    aux_parameters: Any
+    prob_in_model: np.ndarray
+    cost: float
 
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> chain = np.array([[[1.0], [np.nan]], [[2.0], [3.0]]])
-    >>> pc = PosteriorChain(chain, 2, 1, trans_dimensional=True,
-    ...                     prob_in_model=np.array([0.99, 0.01]))
-    >>> _with_unclipped_prob_in_model(pc, 2).prob_in_model
-    array([1. , 0.5])
-    >>> pc.prob_in_model                      # the caller's chain is untouched
-    array([0.99, 0.01])
-    """
-    return replace(posterior_chain,
-                   prob_in_model=find_prob_in_model(posterior_chain.get_chain(),
-                                                    max_num_sources, eps=0))
+
+def _relabel_and_refit(posterior_chain: PosteriorChain,
+                       aux_parameters: Any,
+                       prob_in_model: np.ndarray,
+                       max_num_sources: int,
+                       param_fit: FitFunction,
+                       compute_cost_matrix: Callable[..., np.ndarray],
+                       eps: float,
+                       progress: bool) -> _Labeling:
+    """Run one iteration of the loop: assign under the fit of `posterior_chain`, then fit the new labeling."""
+    relabeled, cost = relabel_samples_one_iteration(posterior_chain.get_chain(), aux_parameters, prob_in_model,
+                                                    max_num_sources, compute_cost_matrix, progress=progress)
+    new_chain = PosteriorChain(relabeled, posterior_chain.num_sources, posterior_chain.num_params_per_source,
+                               trans_dimensional=posterior_chain.trans_dimensional,
+                               prob_in_model=find_prob_in_model(relabeled, max_num_sources, eps=0),
+                               cost_dict={**posterior_chain.cost_dict, max_num_sources: cost},
+                               validate_nan_convention=False)
+    new_chain.validate_nan_convention = posterior_chain.validate_nan_convention
+    return _Labeling(new_chain, param_fit(relabeled, max_num_sources),
+                     find_prob_in_model(relabeled, max_num_sources, eps=eps), cost)
+
+
+def _stall_reason(old_cost: float | None, new_cost: float) -> str | None:
+    """Return "converged" if the cost did not change, "cost increased" if it rose, and None otherwise or first."""
+    if old_cost is None:
+        return None
+    if new_cost - old_cost == 0:
+        return "converged"
+    if new_cost > old_cost:
+        return "cost increased"
+    return None
+
+
+def _lloyd_two_means(points: np.ndarray, start: np.ndarray) -> tuple[float, np.ndarray]:
+    """Run Lloyd's 2-means from ``start`` and ``-start``; return the within sum of squares, inf if a cluster empties."""
+    centroids = np.stack([start, -start])
+    in_second = np.zeros(points.shape[0], dtype=bool)
+    for _ in range(_TWO_MEANS_ITERATIONS):
+        distances = ((points[:, None, :] - centroids[None, :, :]) ** 2).sum(axis=2)
+        assignment = distances[:, 1] < distances[:, 0]
+        if not assignment.any() or assignment.all():
+            return math.inf, assignment
+        converged = np.array_equal(assignment, in_second)
+        in_second = assignment
+        centroids = np.stack([points[~in_second].mean(axis=0), points[in_second].mean(axis=0)])
+        if converged:
+            break
+    return float(np.sum((points - centroids[in_second.astype(int)]) ** 2)), in_second
+
+
+def _one_dimensional_two_means(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Split sorted values at the cut minimizing the within sum of squares; all-equal values give both halves whole."""
+    ordered = np.sort(values)
+    if ordered[0] == ordered[-1]:
+        return ordered, ordered
+    sums, squares = np.cumsum(ordered), np.cumsum(ordered ** 2)
+    left = np.arange(1, ordered.size)
+    within = (squares[:-1] - sums[:-1] ** 2 / left
+              + (squares[-1] - squares[:-1]) - (sums[-1] - sums[:-1]) ** 2 / (ordered.size - left))
+    cut = int(np.argmin(within)) + 1
+    return ordered[:cut], ordered[cut:]
+
+
+def _ashman_d(first: np.ndarray, second: np.ndarray) -> float:
+    """Return Ashman's D, ``sqrt(2) |m1 - m2| / sqrt(v1 + v2)``, infinite when neither set varies."""
+    spread = float(first.var() + second.var())
+    if not spread > 0:
+        return math.inf
+    return math.sqrt(2.0) * abs(float(first.mean() - second.mean())) / math.sqrt(spread)
+
+
+def _two_means_split(rows: np.ndarray) -> tuple[float, float, np.ndarray]:
+    """Split a label's standardized rows by deterministic 2-means; return the score, separation and smaller cluster."""
+    n_rows = rows.shape[0]
+    no_split = 0.0, 0.0, np.zeros(n_rows, dtype=bool)
+    # A constant parameter is held at exactly 0: its computed standard deviation need not be 0 (the mean of 400
+    # copies of 0.3 is not 0.3), and dividing by it would blow rounding up to unit variance.
+    varies = np.ptp(rows, axis=0) > 0
+    standardized = np.zeros(rows.shape)
+    standardized[:, varies] = (rows[:, varies] - rows[:, varies].mean(axis=0)) / rows[:, varies].std(axis=0)
+    total = float(np.sum(standardized ** 2))
+    if not total > 0.0:
+        return no_split
+    _, singular_values, components = np.linalg.svd(standardized, full_matrices=False)
+    starts = [singular_values[0] / math.sqrt(n_rows) * components[0]]
+    starts += [np.eye(rows.shape[1])[column] for column in np.flatnonzero(varies)]
+    within, in_second = min((_lloyd_two_means(standardized, start) for start in starts),
+                            key=lambda split: split[0])
+    if not math.isfinite(within):
+        return no_split
+    first, second = standardized[~in_second], standardized[in_second]
+    direction = first.mean(axis=0) - second.mean(axis=0)
+    separation = _ashman_d(_one_dimensional_two_means(first @ direction)[0],
+                           _one_dimensional_two_means(second @ direction)[1])
+    smaller = in_second if 2 * np.count_nonzero(in_second) <= n_rows else ~in_second
+    return 1.0 - within / total, separation, smaller
+
+
+def _clusters_appear_together(chain: np.ndarray, label: int, samples: np.ndarray, smaller: np.ndarray) -> bool:
+    """Say whether enough samples hold a row of the label in one cluster and another label's row like the other."""
+    rows = chain[samples, label]
+    varies = np.ptp(rows, axis=0) > 0
+    centre = rows.mean(axis=0)
+    scale = np.where(varies, rows.std(axis=0), 1.0)
+
+    def standardize(values: np.ndarray) -> np.ndarray:
+        # Another label's row can lie far out in this label's units; an overflow to infinity still reads as far.
+        with np.errstate(over="ignore", invalid="ignore"):
+            scaled = np.where(varies, (values - centre) / scale, 0.0)
+        return np.where(varies | (values == rows[0]), scaled, np.inf)
+
+    points = standardize(rows)
+    clusters = (points[~smaller], points[smaller])
+    centres = [cluster.mean(axis=0) for cluster in clusters]
+    radii = [float(np.sqrt(((cluster - centre_of) ** 2).sum(axis=1).max()))
+             for cluster, centre_of in zip(clusters, centres)]
+    n_smaller = int(np.count_nonzero(smaller))
+    needed = max(1, math.ceil(_SPLIT_MIN_TOGETHER * 2 * (samples.size - n_smaller) * n_smaller / chain.shape[0]))
+    others = [slot for slot in range(chain.shape[1]) if slot != label]
+    block = max(1, _BLOCK_ROWS // chain.shape[1])
+    together = 0
+    for start in range(0, samples.size, block):
+        part = chain[samples[start:start + block]][:, others]
+        standardized = standardize(part)
+        with np.errstate(over="ignore", invalid="ignore"):
+            distances = [np.sqrt(((standardized - centre_of) ** 2).sum(axis=-1)) for centre_of in centres]
+        present = source_present(part)
+        like_larger = present & (distances[0] <= radii[0]) & (distances[0] < distances[1])
+        like_smaller = present & (distances[1] <= radii[1]) & (distances[1] < distances[0])
+        in_smaller = smaller[start:start + block]
+        together += int(np.count_nonzero(np.where(in_smaller, like_larger.any(axis=1), like_smaller.any(axis=1))))
+        if together >= needed:
+            return True
+    return False
+
+
+def _split_candidates(chain: np.ndarray, exclusive: bool = False) -> list[tuple[int, int, np.ndarray, float]]:
+    """List ``(donor, receiver, samples, score)`` split proposals, best donor first, sparsest receiver first."""
+    n_slots, n_params = chain.shape[1], chain.shape[2]
+    present = source_present(chain)
+    minimum = n_params + 2
+    donors = []
+    for label in range(n_slots):
+        samples = np.flatnonzero(present[:, label])
+        if samples.size < 2 * minimum:
+            continue
+        score, separation, smaller = _two_means_split(chain[samples, label])
+        if np.count_nonzero(smaller) < minimum or separation < _SPLIT_MIN_SEPARATION:
+            continue
+        if not exclusive and not _clusters_appear_together(chain, label, samples, smaller):
+            logger.info("Split moves: label %d holds two clusters that too few samples hold together, so it "
+                        "is kept whole, as one source with two modes; split_exclusive=True would propose it.",
+                        label)
+            continue
+        donors.append((score, label, samples[smaller]))
+    donors.sort(key=lambda donor: (-donor[0], donor[1]))
+    count = min(_SPLIT_CANDIDATES, n_slots)
+    by_probability = np.argsort(present.mean(axis=0), kind="stable")
+    proposals: list[tuple[int, int, np.ndarray, float]] = []
+    for score, donor, samples in donors[:count]:
+        receivers = [int(label) for label in by_probability if label != donor][:count]
+        proposals.extend((donor, receiver, samples, score) for receiver in receivers)
+    return proposals
+
+
+def _propose_split(posterior_chain: PosteriorChain, donor: int, receiver: int,
+                   samples: np.ndarray) -> PosteriorChain:
+    """Swap two labels' whole rows in some samples; the new chain has an unclipped prob_in_model and no cost at K."""
+    chain = posterior_chain.get_chain().copy()
+    chain[samples, donor], chain[samples, receiver] = chain[samples, receiver], chain[samples, donor]
+    width = posterior_chain.num_sources
+    proposal = PosteriorChain(chain, width, posterior_chain.num_params_per_source,
+                              trans_dimensional=posterior_chain.trans_dimensional,
+                              prob_in_model=find_prob_in_model(chain, width, eps=0),
+                              cost_dict={key: value for key, value in posterior_chain.cost_dict.items()
+                                         if key != width},
+                              validate_nan_convention=False)
+    proposal.validate_nan_convention = posterior_chain.validate_nan_convention
+    return proposal
+
+
+@dataclass(frozen=True)
+class _Evaluation:
+    """What the iterations from one split proposal found: count, cheapest labeling, where, whether it paid, stall."""
+
+    iterations: int
+    best: _Labeling
+    found_at: int
+    paid: bool
+    stall: tuple[str, _Labeling] | None
+
+
+def _evaluate_split(proposal: PosteriorChain,
+                    max_num_sources: int,
+                    param_fit: FitFunction,
+                    compute_cost_matrix: Callable[..., np.ndarray],
+                    eps: float,
+                    max_iterations: int,
+                    pays: Callable[[_Labeling], bool]) -> _Evaluation:
+    """Run the loop's own iterations from a proposed labeling, and return the cheapest one found."""
+    aux_parameters, prob_in_model = (param_fit(proposal.get_chain(), max_num_sources),
+                                     find_prob_in_model(proposal.get_chain(), max_num_sources, eps=eps))
+    current = proposal
+    old_cost: float | None = None
+    best: _Labeling | None = None
+    found_at = iterations = 0
+    paid = False
+    stall: tuple[str, _Labeling] | None = None
+    while iterations < max_iterations:
+        new = _relabel_and_refit(current, aux_parameters, prob_in_model, max_num_sources,
+                                 param_fit, compute_cost_matrix, eps, progress=False)
+        iterations += 1
+        logger.debug("  Split proposal, iteration %d: cost of assignment %s.", iterations, new.cost)
+        reason = _stall_reason(old_cost, new.cost)
+        if reason is not None:
+            stall = (reason, new)
+            break
+        best, found_at = new, iterations
+        paid = paid or pays(new)
+        current, aux_parameters, prob_in_model, old_cost = new.chain, new.aux_parameters, new.prob_in_model, new.cost
+    assert best is not None, "max_iterations must be at least 1"
+    return _Evaluation(iterations, best, found_at, paid, stall)
+
+
+def _opened_label_cost(n_samples: int, n_params: int) -> float:
+    """Return the per-sample BIC price of one more normal label, ``k log(N) / (2 N)`` with ``k = P + P(P+1)/2 + 1``."""
+    num_parameters = n_params + n_params * (n_params + 1) / 2 + 1
+    return 0.5 * num_parameters * math.log(n_samples) / n_samples
+
+
+@dataclass(frozen=True)
+class _SplitOutcome:
+    """What one split pass did: iterations completed, the labeling accepted, where, its stall, whether it finished."""
+
+    iteration: int
+    accepted: _Labeling | None = None
+    found_at: int = 0
+    stall: tuple[str, _Labeling] | None = None
+    complete: bool = True
+
+
+def _split_pass(best_chain: PosteriorChain,
+                best_cost: float,
+                max_num_sources: int,
+                param_fit: FitFunction,
+                compute_cost_matrix: Callable[..., np.ndarray],
+                eps: float,
+                iteration: int,
+                num_iterations: int,
+                exclusive: bool = False) -> _SplitOutcome:
+    """Evaluate the best labeling's split proposals in turn, and accept the first that beats it net of its price."""
+    chain = best_chain.get_chain()
+    proposals = _split_candidates(chain, exclusive)
+    labels_in_use = int(np.count_nonzero(source_present(chain).any(axis=0)))
+    price = _opened_label_cost(chain.shape[0], chain.shape[2])
+
+    def opened(labeling: _Labeling) -> int:
+        """Count the labels by which `labeling` raises the number in use: the net increase, never below 0."""
+        return max(0, int(np.count_nonzero(source_present(labeling.chain.get_chain()).any(axis=0))) - labels_in_use)
+
+    def pays(labeling: _Labeling) -> bool:
+        """Whether `labeling` beats the best by the price of the labels it adds."""
+        return labeling.cost < best_cost - opened(labeling) * price
+
+    if not proposals:
+        logger.info("Split moves: no label splits into two clusters large enough to fit%s, so there is "
+                    "nothing to propose.", "" if exclusive else " and held together often enough")
+    complete = True
+    for donor, receiver, samples, score in proposals:
+        if iteration >= num_iterations:
+            logger.info("Split moves: the budget of %d iterations is spent.", num_iterations)
+            complete = False
+            break
+        logger.info("Split move: label %d (bimodality %.3f) gives the %d rows of its smaller cluster to "
+                    "label %d.", donor, score, samples.size, receiver)
+        evaluation = _evaluate_split(
+            _propose_split(best_chain, donor, receiver, samples), max_num_sources, param_fit,
+            compute_cost_matrix, eps, min(_SPLIT_EVALUATION_ITERATIONS, num_iterations - iteration), pays)
+        if evaluation.paid:
+            logger.info("Split move accepted after %d iterations: cost %s, down from %s.",
+                        evaluation.iterations, evaluation.best.cost, best_cost)
+            return _SplitOutcome(iteration + evaluation.iterations, evaluation.best,
+                                 iteration + evaluation.found_at, evaluation.stall)
+        candidate = evaluation.best
+        logger.info("Split move rejected after %d iterations: its best cost %s does not beat %s "
+                    "(%d label(s) opened).", evaluation.iterations, candidate.cost,
+                    best_cost - opened(candidate) * price, opened(candidate))
+        iteration += evaluation.iterations
+        # Incomplete when the budget, not the stopping rule or the cap, ended this evaluation.
+        complete = complete and (evaluation.stall is not None
+                                 or evaluation.iterations == _SPLIT_EVALUATION_ITERATIONS)
+    return _SplitOutcome(iteration, complete=complete)
 
 
 def run_relabeling_loop(posterior_chain: PosteriorChain,
                         param_fit: FitFunction,
-                        compute_cost_matrix: Callable,
+                        compute_cost_matrix: Callable[..., np.ndarray],
                         max_num_sources: int | None = None,
                         num_iterations: int = 200,
                         eps: float = 1e-6,
-                        checkpoint_dir: Optional[str] = None,
-                        resume_from: Optional[str] = None,
-                        progress: bool = True) -> PosteriorChain:
+                        checkpoint_dir: str | os.PathLike[str] | None = None,
+                        resume_from: str | os.PathLike[str] | None = None,
+                        progress: bool = True,
+                        *,
+                        method: str | None = None,
+                        settings: Mapping[str, Any] | None = None,
+                        run_info: Mapping[str, Any] | None = None,
+                        keep_checkpoints: int | None = None,
+                        split_moves: bool = False,
+                        split_exclusive: bool = False) -> PosteriorChain:
+    """Relabel a chain by alternating fit and assignment, keep the cheapest labeling, and stop when the cost stalls.
+
+    Parameters:
+        posterior_chain: the chain to relabel, never modified; when resuming, the chain the run was started with.
+        param_fit: ``(chain, K) -> aux_parameters``, refitted to each new labeling.
+        compute_cost_matrix: ``(sample, aux_parameters, prob_in_model, K)`` giving the (K, S) rewards to maximize.
+        max_num_sources: number of source slots K, at least the chain's; None means the chain's own width.
+        num_iterations: iteration budget, counting those a resumed checkpoint holds and those split passes spend.
+        eps: clip bound of the probabilities fed to the cost matrix; the returned prob_in_model is unclipped.
+        checkpoint_dir: directory the best labeling is written to whenever it or its cost improves, and on stopping.
+        resume_from: checkpoint file, or directory of them, of an earlier run of the same method on the same chain.
+        progress: show a progress bar over the samples of each iteration.
+        method: name of the method; required with checkpoint_dir or resume_from, compared on resume.
+        settings: values that change what a cost means; recorded and compared on resume.
+        run_info: settings of the entry point; recorded and never compared.
+        keep_checkpoints: keep only this many newest checkpoints; None keeps them all.
+        split_moves: where the loop would stop, first try to split a label holding two clusters into a sparse label.
+        split_exclusive: with split_moves, also split a label whose two clusters the chain rarely shows together.
+
+    Returns:
+        the cheapest labeling accepted, with prob_in_model recomputed from it without clipping.
+        `cost_dict[K]` is the returned labeling's cost under the fit before it.
+
+    Raises:
+        TypeError: posterior_chain is not a PosteriorChain.
+        ValueError: an invalid setting, width or empty chain; checkpointing without method; a checkpoint_dir holding
+            other checkpoints; or a resumed checkpoint of another run.
+        FileNotFoundError: resume_from is neither a checkpoint file nor a directory holding one.
+        PermissionError: checkpoint_dir is not writable.
+
+    Warns:
+        UserWarning: the resumed run had already stopped or used the budget; with split_moves, the budget ended the
+            search before it stopped.
     """
-    Run the shared relabeling loop: fit, assign, keep the best, stop when it stalls.
+    check_int("num_iterations", num_iterations)
+    check_eps(eps)
+    if keep_checkpoints is not None:
+        check_int("keep_checkpoints", keep_checkpoints)
+    width = check_chain(posterior_chain, max_num_sources)
+    # Taken before widening, which the digest ignores; hashing is a pass over the chain, so only when checkpointing.
+    fingerprint: dict[str, Any] | None = None
+    if checkpoint_dir is not None or resume_from is not None:
+        if method is None:
+            raise ValueError("run_relabeling_loop needs method= to write or resume checkpoints: a checkpoint records "
+                             "the method that wrote it, so a resume can refuse another method's costs.")
+        fingerprint = run_fingerprint(posterior_chain, method=method, settings=settings, max_num_sources=width,
+                                      eps=eps, run_info=run_info)
 
-    Every relabeling method in petra is this loop plus a `param_fit` and a
-    `compute_cost_matrix`.  :func:`create_relabel_samples` builds that pair from
-    a ``(fit, aux_distribution)`` pair; :func:`petra.bayesian_gaussian.bayesian_relabel_loop`
-    supplies its own.  Nothing else about the methods differs, so nothing else
-    is parameterised here.
-
-    Parameters
-    ----------
-    posterior_chain : PosteriorChain
-        Chain to relabel; widened to `max_num_sources` if necessary.  Never
-        modified in place.
-    param_fit : callable
-        Fit function ``(chain, max_num_sources) -> aux_parameters``, as returned
-        by :func:`petra.parametric_fits.create_parametric_fit`.  It is re-run on
-        the current labeling at the start of every iteration.
-    compute_cost_matrix : callable
-        Cost matrix builder
-        ``(sample, aux_parameters, prob_in_model, max_num_sources) -> cost_matrix``,
-        as returned by :func:`petra.cost_matrix.create_compute_cost_matrix`.
-    max_num_sources : int, optional
-        Target number of source slots (defaults to ``posterior_chain.num_sources``).
-    num_iterations : int, default 200
-        Maximum relabeling iterations before stopping.  Must be at least 1.
-    eps : float, default 1e-6
-        Clip bound on the inclusion probabilities *fed to the cost matrix*,
-        keeping them inside ``[eps, 1 - eps]`` so the logarithms there stay
-        finite.  It does not reach the returned array; see Notes.
-    checkpoint_dir : str, optional
-        Directory to write the best chain available after every iteration.
-        ``None`` disables checkpointing.
-    resume_from : str, optional
-        Checkpoint file, or directory of checkpoints, written by an earlier run
-        with the same `checkpoint_dir`.  The chain stored there replaces
-        `posterior_chain`, the iteration counter picks up where that run
-        stopped, and the cost stored with the chain becomes the cost to beat, so
-        a job killed at the walltime limit can be restarted without losing its
-        progress and without coming back worse than the checkpoint.  See
-        :func:`load_checkpoint` for what survives the round-trip.
-    progress : bool, default True
-        Show a tqdm progress bar over the samples of each iteration.
-
-    Returns
-    -------
-    PosteriorChain
-        The cheapest labeling seen during the run, with that cost recorded in
-        ``cost_dict[max_num_sources]`` and with ``prob_in_model`` recomputed
-        from the returned samples *without* clipping, so that
-        ``find_prob_in_model(result.get_chain(), max_num_sources, eps=0)``
-        reproduces it exactly.
-
-    Raises
-    ------
-    ValueError
-        If `num_iterations` is less than 1, or if `max_num_sources` is smaller
-        than the number of entries in the chain.
-
-    Notes
-    -----
-    Cost is negated log-likelihood, so lower is better.  The loop keeps the
-    cheapest labeling it has produced and stops as soon as an iteration comes
-    back more expensive than the one before it, returning that best labeling
-    rather than the last one.  Iterating a relabeler is not a descent method --
-    refitting the auxiliary distributions to a new labeling can raise the cost
-    -- so without this the returned catalog could be worse than one already
-    computed on the way to it.
-
-    Resuming extends that guarantee across a restart.  The checkpoint's own cost
-    seeds the best-so-far, so a run picked up after a walltime kill cannot come
-    back with a labeling more expensive than the one already on disk.  The
-    *stopping* rule is not seeded the same way: ``old_cost_of_assignment`` starts
-    at ``None`` again, so a resumed run always completes one iteration before it
-    has a difference to test, exactly as a fresh one does.
-
-    `eps` governs only the clipping applied *inside* the loop, to the copy of
-    the inclusion probabilities that the cost matrix takes logarithms of: a
-    source present in every sample would otherwise contribute ``log(1 - 1)``
-    and a source present in none ``log(0)``.  The array that comes back is
-    unclipped, and is recomputed from the labeling being returned rather than
-    from the one the last cost matrix was built on.  A chain that reports
-    ``prob_in_model = [0.99, 0.01]`` for sources that are in fact always and
-    never present is describing the clip bound, not the posterior.
-
-    The two loops this replaces looked like they differed in how they refreshed
-    the fit and the inclusion probabilities each iteration -- one called
-    :func:`petra.parametric_fits.update_parametric_fit_and_prob_in_model`, the
-    other called its fit and :func:`petra.utils.find_prob_in_model` by hand.
-    That helper *is* exactly those two calls, so there is nothing to
-    parameterise there: `param_fit` and `eps` cover both spellings.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.aux_distributions import mv_normal_aux_distribution
-    >>> from petra.cost_matrix import create_compute_cost_matrix
-    >>> from petra.parametric_fits import create_parametric_fit, mv_normal_fit
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> from petra.utils import find_prob_in_model
-    >>> rng = np.random.default_rng(0)
-    >>> pc = PosteriorChain(rng.normal(size=(20, 2, 1)) + np.array([[0.0], [5.0]]), 2, 1)
-    >>> result = run_relabeling_loop(pc,
-    ...                              create_parametric_fit(mv_normal_fit),
-    ...                              create_compute_cost_matrix(mv_normal_aux_distribution),
-    ...                              max_num_sources=2, num_iterations=3, progress=False)
-    >>> sorted(result.cost_dict)
-    [2]
-
-    Both sources are in every sample, and the returned probabilities say so
-    exactly rather than reporting ``1 - eps``:
-
-    >>> result.prob_in_model
-    array([1., 1.])
-    >>> bool(np.array_equal(result.prob_in_model,
-    ...                     find_prob_in_model(result.get_chain(), 2, eps=0)))
-    True
-    """
-    _validate_relabel_settings(num_iterations, eps)
-
-    start_iteration = 0
+    start_iteration = best_iteration = 0
+    resumed: Checkpoint | None = None
     if resume_from is not None:
-        posterior_chain, start_iteration = load_checkpoint(resume_from)
+        resumed = load_checkpoint(resume_from, fingerprint=fingerprint)
+        if checkpoint_dir is not None:
+            prepare_checkpoint_dir(checkpoint_dir, resumed)
         logger.warning("Resuming from checkpoint %s after %d completed iterations.",
-                       resume_from, start_iteration)
-
-    posterior_chain = prepare_chain(posterior_chain, max_num_sources)
+                       resumed.path, resumed.completed_iterations)
+        posterior_chain, start_iteration, best_iteration = (resumed.posterior_chain, resumed.completed_iterations,
+                                                            resumed.file_iteration)
+    else:
+        posterior_chain = prepare_chain(posterior_chain, width)
+        if checkpoint_dir is not None:
+            prepare_checkpoint_dir(checkpoint_dir)
     max_num_sources = posterior_chain.num_sources
 
-    if start_iteration >= num_iterations:
+    if resumed is not None and start_iteration >= num_iterations:
         logger.warning("Checkpoint already holds %d of %d iterations; nothing to do.",
                        start_iteration, num_iterations)
-        # Even the do-nothing path owes the caller a self-describing chain: the
-        # checkpoint on disk carries the clipped, pre-relabel array of the run
-        # that wrote it.
+        warnings.warn(
+            f"Checkpoint {resumed.path!r} already holds {start_iteration} completed iterations, and "
+            f"num_iterations={num_iterations} counts those too, so there is nothing to do: it is "
+            f"returned unchanged. Pass num_iterations={start_iteration + 1} or more to continue "
+            f"the run.",
+            UserWarning, stacklevel=2,
+        )
+        return _with_unclipped_prob_in_model(posterior_chain, max_num_sources)
+
+    if resumed is not None and resumed.state["stopped"]:
+        reason = _STOP_REASONS.get(resumed.state["stop_reason"], resumed.state["stop_reason"])
+        logger.warning("The run that wrote %s already stopped after %d iterations because %s; "
+                       "nothing to do.", resumed.path, start_iteration, reason)
+        warnings.warn(
+            f"The run that wrote checkpoint {resumed.path!r} already stopped after "
+            f"{start_iteration} iterations because {reason}, so there is nothing to do: its "
+            f"labeling is final and is returned unchanged. To relabel it further, start a fresh "
+            f"run in an empty checkpoint directory.",
+            UserWarning, stacklevel=2,
+        )
         return _with_unclipped_prob_in_model(posterior_chain, max_num_sources)
 
     logger.info("Sorting the posterior chain: maximum number of iterations %d, "
                 "maximum number of source labels %d.", num_iterations, max_num_sources)
 
-    # set up the for loop
     old_posterior_chain = posterior_chain
-    old_parametric_fit, old_prob_in_model = update_parametric_fit_and_prob_in_model(
-        posterior_chain, max_num_sources, param_fit, eps=eps)
-    # `None` rather than 0.0: on the first iteration there is no previous cost to
-    # compare against, and 0.0 is a perfectly reachable cost, not a sentinel.
+    old_parametric_fit, old_prob_in_model = (param_fit(posterior_chain.get_chain(), max_num_sources),
+                                             find_prob_in_model(posterior_chain.get_chain(), max_num_sources, eps=eps))
+    # None, not 0.0: the first iteration has no previous cost, and 0.0 is a reachable cost.
     old_cost_of_assignment: float | None = None
     best_cost_of_assignment: float | None = None
     best_posterior_chain = _with_unclipped_prob_in_model(posterior_chain, max_num_sources)
-    if resume_from is not None:
-        # A resumed run must never come back worse than the checkpoint it started
-        # from -- that is the one thing resume has to guarantee -- so the cost the
-        # checkpoint carries is the cost to beat.  Without this the first
-        # post-resume iteration became "best" unconditionally, however expensive.
-        # Only on the resume path: an input chain handed to a fresh run may carry a
-        # `cost_dict` entry under this same key from an initialization step, and
-        # that number came from a different fit, so it is not comparable with
-        # anything this loop computes.
-        best_cost_of_assignment = posterior_chain.cost_dict.get(max_num_sources)
+    if resumed is not None:
+        # A resume never comes back worse than its checkpoint, the run's latest labeling, so its cost is both the one
+        # to beat and the previous cost; a fresh run's input cost came from another fit and is not comparable.
+        best_cost_of_assignment = old_cost_of_assignment = posterior_chain.cost_dict.get(max_num_sources)
         logger.info("The resumed labeling cost %s; that is what this run has to beat.",
                     best_cost_of_assignment)
 
-    for iteration in range(start_iteration, num_iterations):
-        # get the new values
-        new_posterior_chain = relabel_posterior_chain_one_iteration(old_posterior_chain, old_parametric_fit, old_prob_in_model, max_num_sources, compute_cost_matrix, progress=progress)
-        # Overwrite the clipped, pre-relabel array that step stored with one derived
-        # from the labeling it just produced, before that chain can be checkpointed,
-        # kept as the best, or returned.
-        new_posterior_chain = _with_unclipped_prob_in_model(new_posterior_chain, max_num_sources)
-        new_parametric_fit, new_prob_in_model = update_parametric_fit_and_prob_in_model(
-            new_posterior_chain, max_num_sources, param_fit, eps=eps)
-        # `relabel_posterior_chain_one_iteration` always records this iteration's cost,
-        # so this key exists.
-        new_cost_of_assignment = new_posterior_chain.cost_dict[max_num_sources]
+    def keep_if_cheaper(candidate: _Labeling, found_at: int) -> bool:
+        """Make `candidate` the best labeling if it costs strictly less; say whether it did."""
+        nonlocal best_cost_of_assignment, best_posterior_chain, best_iteration
+        if best_cost_of_assignment is not None and not candidate.cost < best_cost_of_assignment:
+            return False
+        # A refit can lower the cost of an unchanged assignment: that labeling keeps the iteration that found it, so
+        # its file is rewritten in place rather than copied.
+        if best_cost_of_assignment is None or not np.array_equal(
+                candidate.chain.get_chain(), best_posterior_chain.get_chain(), equal_nan=True):
+            best_iteration = found_at
+        best_cost_of_assignment = candidate.cost
+        best_posterior_chain = candidate.chain
+        return True
 
-        # log the results
+    def save(completed: int, stop_reason: str | None) -> None:
+        """Write the best labeling, with the run's progress, if the run checkpoints at all."""
+        if checkpoint_dir is None:
+            return
+        assert fingerprint is not None
+        write_checkpoint(best_posterior_chain, checkpoint_dir, best_iteration, {
+            **fingerprint,
+            "iteration": completed,
+            "best_iteration": best_iteration,
+            "best_cost": best_cost_of_assignment,
+            "stopped": stop_reason is not None,
+            "stop_reason": stop_reason,
+        }, keep=keep_checkpoints)
+
+    iteration = start_iteration
+    while iteration < num_iterations:
+        new = _relabel_and_refit(old_posterior_chain, old_parametric_fit, old_prob_in_model,
+                                 max_num_sources, param_fit, compute_cost_matrix, eps, progress)
+        iteration += 1
+
         if old_cost_of_assignment is None:
-            delta_cost_of_assignment = new_cost_of_assignment
+            logger.info("Iteration %d: cost of assignment is %s; there is no previous cost to "
+                        "compare it with.", iteration, new.cost)
         else:
-            delta_cost_of_assignment = new_cost_of_assignment - old_cost_of_assignment
-        logger.info("Iteration %d: Difference in cost of assignment is %s with total cost of %s.",
-                    iteration + 1, delta_cost_of_assignment, new_cost_of_assignment)
-        logger.info("\tProbabilities in model: %s", new_prob_in_model)
+            logger.info("Iteration %d: Difference in cost of assignment is %s with total cost of %s.",
+                        iteration, new.cost - old_cost_of_assignment, new.cost)
+        logger.info("\tProbabilities in model: %s", new.prob_in_model)
 
-        # Remember the cheapest labeling seen so far.  The comparison is strict, so a
-        # tie keeps the earlier chain and convergence returns exactly what the previous
-        # iteration produced.
-        if best_cost_of_assignment is None or new_cost_of_assignment < best_cost_of_assignment:
-            best_cost_of_assignment = new_cost_of_assignment
-            best_posterior_chain = new_posterior_chain
+        # A checkpoint holds the best labeling, not the latest: written when it or its cost improves, and once more on
+        # stopping, so a resume knows the run is over.
+        if keep_if_cheaper(new, iteration):
+            save(iteration, None)
+        stop_reason = _stall_reason(old_cost_of_assignment, new.cost)
 
-        # A checkpoint is a resumable snapshot of what this run would return at
-        # this point.  Persisting the latest candidate instead loses the best
-        # labeling whenever an iteration raises the cost and then stops the loop.
-        if checkpoint_dir is not None:
-            _checkpoint_posterior_chain(best_posterior_chain, checkpoint_dir, iteration + 1)
+        # An accepted split move is checkpointed where it was found and the loop carries on from it as a resume
+        # would; a stall its evaluation already ran into is taken over, not recomputed.
+        while stop_reason is not None and split_moves:
+            assert best_cost_of_assignment is not None
+            logger.info("Iteration %d: the search stalled (%s) at cost %s; trying split moves.",
+                        iteration, stop_reason, best_cost_of_assignment)
+            # Even with no budget left: a pass with nothing to propose ends the search, not the budget.
+            outcome = _split_pass(best_posterior_chain, best_cost_of_assignment, max_num_sources, param_fit,
+                                  compute_cost_matrix, eps, iteration, num_iterations, split_exclusive)
+            iteration = outcome.iteration
+            if outcome.accepted is None:
+                if outcome.complete:
+                    logger.info("No split move lowered the cost below %s.", best_cost_of_assignment)
+                else:
+                    # The budget, not the search, ended here: not a stop, and nothing is written, so a resume with a
+                    # larger budget repeats the same iterations and then runs this pass in full.
+                    logger.info("The budget of %d iterations ran out before the split pass finished; "
+                                "a resume with a larger num_iterations can finish it.", num_iterations)
+                    stop_reason = None
+                break
+            keep_if_cheaper(outcome.accepted, outcome.found_at)
+            save(outcome.found_at, None)
+            if outcome.stall is None:
+                new, stop_reason = outcome.accepted, None
+            else:
+                old_cost_of_assignment = outcome.accepted.cost
+                stop_reason, new = outcome.stall
 
-        # break if converged
-        if old_cost_of_assignment is not None and delta_cost_of_assignment == 0:
-            logger.info("Stopped after %d iterations because the cost didn't change from the previous iteration.",
-                        iteration + 1)
+        if stop_reason is not None:
+            save(iteration, stop_reason)
+            if stop_reason == "converged":
+                logger.info("Stopped after %d iterations because the cost didn't change from the previous "
+                            "iteration.", iteration)
+            else:
+                logger.info("Stopped after %d iterations because the cost increased from %s to %s; "
+                            "returning the best labeling accepted, of cost %s.",
+                            iteration, old_cost_of_assignment, new.cost, best_cost_of_assignment)
             break
 
-        # break if the cost went back up: the labeling is no longer improving, and the
-        # best one has already been kept.
-        if old_cost_of_assignment is not None and new_cost_of_assignment > old_cost_of_assignment:
-            logger.info("Stopped after %d iterations because the cost increased from %s to %s; "
-                        "returning the best labeling seen, of cost %s.",
-                        iteration + 1, old_cost_of_assignment, new_cost_of_assignment,
-                        best_cost_of_assignment)
-            break
-
-        # update the old values to the new values
-        old_posterior_chain = new_posterior_chain
-        old_parametric_fit = new_parametric_fit
-        old_prob_in_model = new_prob_in_model
-        old_cost_of_assignment = new_cost_of_assignment
+        old_posterior_chain, old_parametric_fit, old_prob_in_model, old_cost_of_assignment = (
+            new.chain, new.aux_parameters, new.prob_in_model, new.cost)
 
     else:
         logger.info("Final cost of assignment: %s after the maximum number (%d) of iterations.",
                     best_cost_of_assignment, num_iterations)
+        # With split moves the search is over only when a pass accepts nothing, so a budget that ends it warns.
+        if split_moves:
+            warnings.warn(
+                f"The budget of num_iterations={num_iterations} ran out before the search with split "
+                f"moves stopped, so the search did not finish, and the labeling returned is the best "
+                f"found so far. Each split proposal can take up to {_SPLIT_EVALUATION_ITERATIONS} "
+                f"iterations. Pass a larger num_iterations to finish the search -- a run with a "
+                f"checkpoint_dir can be resumed with one -- or split_moves=False for the plain search.",
+                UserWarning, stacklevel=2,
+            )
 
     return best_posterior_chain
-
-
-def create_relabel_samples(parametric_fit_function: Callable,
-                           aux_distribution: Callable,
-                           single_parameter: int | None = None,
-                           eps: float = 1e-2) -> Callable:
-    """
-    Build a relabeling procedure combining fitting, cost computation, and assignment.
-
-    Parameters
-    ----------
-    parametric_fit_function : callable
-        Fit function `(chain, max_num_sources) -> aux_parameters`.
-    aux_distribution : callable
-        PDF function for cost matrix `(sample, aux_parameters, prob_in_model, idx)`.
-    single_parameter : int, optional
-        Fixes the parameter index for single-parameter fit/distribution.
-    eps : float, optional
-        Clip bound on the inclusion probabilities used *inside* the cost matrix,
-        keeping them inside ``[eps, 1 - eps]`` so the logarithms there stay
-        finite.  The ``prob_in_model`` the relabeler returns is unclipped; see
-        Notes.
-
-    Returns
-    -------
-    relabel_samples : callable
-        Function with signature
-        `(posterior_chain, max_num_sources, num_iterations, checkpoint_dir,
-        resume_from, progress) -> PosteriorChain`.
-
-    Notes
-    -----
-    The returned relabeler is :func:`run_relabeling_loop` with `param_fit` and
-    `compute_cost_matrix` already bound.  It keeps the cheapest labeling it has
-    seen and returns that one, never the merely most recent one, and its
-    ``prob_in_model`` is recomputed from the labeling it returns with no
-    clipping -- see the Notes of :func:`run_relabeling_loop`.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from petra.aux_distributions import mv_normal_aux_distribution
-    >>> from petra.parametric_fits import mv_normal_fit
-    >>> from petra.posterior_chain import PosteriorChain
-    >>> relabel = create_relabel_samples(mv_normal_fit, mv_normal_aux_distribution)
-    >>> rng = np.random.default_rng(0)
-    >>> pc = PosteriorChain(rng.normal(size=(20, 2, 1)) + np.array([[0.0], [5.0]]), 2, 1)
-    >>> new_pc = relabel(pc, max_num_sources=2, num_iterations=3, progress=False)
-    >>> isinstance(new_pc, PosteriorChain)
-    True
-    """
-
-    # make all the necessary pieces
-    param_fit = create_parametric_fit(parametric_fit_function, single_parameter=single_parameter)
-    compute_cost_matrix = create_compute_cost_matrix(aux_distribution, single_parameter=single_parameter)
-
-    def relabel_samples(posterior_chain: PosteriorChain,
-                        max_num_sources: int | None = None,
-                        num_iterations: int = 200,
-                        checkpoint_dir: Optional[str] = None,
-                        resume_from: Optional[str] = None,
-                        progress: bool = True) -> PosteriorChain:
-        """
-        Iteratively relabel a PosteriorChain with a chosen aux distribution.
-
-        Parameters
-        ----------
-        posterior_chain : PosteriorChain
-            Chain to process; widened to `max_num_sources` if necessary.
-        max_num_sources : int, optional
-            Target number of sources (defaults to chain.num_sources).
-        num_iterations : int, default 200
-            Maximum relabeling iterations before stopping.  Must be at least 1.
-        checkpoint_dir : str, optional
-            Directory to save the best state available after each iteration.
-            If None, no checkpointing.
-        resume_from : str, optional
-            Checkpoint file, or directory of checkpoints, written by an earlier
-            run with the same `checkpoint_dir`.  The chain stored there
-            replaces `posterior_chain`, the iteration counter picks up where
-            that run stopped, and the cost stored with the chain becomes the
-            cost to beat, so a job killed at the walltime limit can be restarted
-            without losing its progress and without coming back worse than the
-            checkpoint.  See :func:`load_checkpoint` for what survives the
-            round-trip.
-        progress : bool, default True
-            Show a tqdm progress bar over the samples of each iteration.
-
-        Returns
-        -------
-        PosteriorChain
-            The cheapest labeling seen during the run, with its cost recorded
-            in ``cost_dict[max_num_sources]`` and with ``prob_in_model``
-            recomputed from the returned samples *without* clipping, so that
-            ``find_prob_in_model(result.get_chain(), max_num_sources, eps=0)``
-            reproduces it exactly.
-
-        Raises
-        ------
-        ValueError
-            If `num_iterations` is less than 1, or if `max_num_sources` is
-            smaller than the number of entries in the chain.
-
-        Notes
-        -----
-        Cost is negated log-likelihood, so lower is better.  The loop keeps the
-        cheapest labeling it has produced and stops as soon as an iteration
-        comes back more expensive than the one before it, returning that best
-        labeling rather than the last one.  Iterating a relabeler is not a
-        descent method -- refitting the auxiliary distributions to a new
-        labeling can raise the cost -- so without this the returned catalog
-        could be worse than one already computed on the way to it.
-
-        The `eps` given to :func:`create_relabel_samples` still governs the
-        clipping used *inside* the cost matrix during iteration, where a
-        probability of exactly 0 or 1 would make a ``log`` term infinite.  Only
-        the returned array is unclipped.
-
-        Examples
-        --------
-        >>> import numpy as np
-        >>> from petra.aux_distributions import mv_normal_aux_distribution
-        >>> from petra.parametric_fits import mv_normal_fit
-        >>> from petra.posterior_chain import PosteriorChain
-        >>> relabel = create_relabel_samples(mv_normal_fit, mv_normal_aux_distribution)
-        >>> rng = np.random.default_rng(0)
-        >>> pc = PosteriorChain(rng.normal(size=(20, 2, 1)) + np.array([[0.0], [5.0]]), 2, 1)
-        >>> result_pc = relabel(pc, max_num_sources=2, num_iterations=3, progress=False)
-        >>> sorted(result_pc.cost_dict)
-        [2]
-
-        Both sources are in every sample, and the returned probabilities say so
-        exactly rather than reporting the clip bound ``1 - eps``:
-
-        >>> result_pc.prob_in_model
-        array([1., 1.])
-        """
-        return run_relabeling_loop(posterior_chain,
-                                   param_fit,
-                                   compute_cost_matrix,
-                                   max_num_sources=max_num_sources,
-                                   num_iterations=num_iterations,
-                                   eps=eps,
-                                   checkpoint_dir=checkpoint_dir,
-                                   resume_from=resume_from,
-                                   progress=progress)
-
-    return relabel_samples

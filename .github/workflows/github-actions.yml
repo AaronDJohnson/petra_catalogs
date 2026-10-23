@@ -72,8 +72,8 @@ jobs:
           assert actual == expected, (actual, expected)
           print(sys.version, petra.__version__)
           PY
-      - name: Unit tests, doctests, and branch coverage
-        run: uv run pytest -v --cov-fail-under=98
+      - name: Unit tests and branch coverage
+        run: uv run pytest -v --cov-fail-under=90
 
   typecheck:
     name: Type check

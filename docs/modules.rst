@@ -7,12 +7,6 @@ Public package
 .. automodule:: petra
    :no-members:
 
-Settings
---------
-
-.. automodule:: petra.options
-   :members:
-
 Catalog entry points
 --------------------
 
@@ -43,16 +37,10 @@ Relabeling internals
 .. automodule:: petra.relabel
    :members:
 
-.. automodule:: petra.cost_matrix
+.. automodule:: petra.checkpoint
    :members:
 
-.. automodule:: petra.parametric_fits
-   :members:
-
-.. automodule:: petra.aux_distributions
-   :members:
-
-.. automodule:: petra.flow_utils
+.. automodule:: petra.fits
    :members:
 
 .. automodule:: petra.utils

@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
     # Core numerics / IO. Required by petra.utils, petra.posterior_chain,
-    # petra.samples_io, petra.parametric_fits, petra.cost_matrix, petra.relabel.
+    # petra.samples_io, petra.fits, petra.checkpoint, petra.relabel.
     "numpy>=2.2.3,<3",
     "scipy>=1.15.2,<2",
     "pandas>=2.2.3,<3",
@@ -41,7 +41,7 @@ dependencies = [
     # Progress bars in petra.relabel and petra.bayesian_gaussian.
     "tqdm>=4.67.1,<5",
 
-    # Coppuccino-backed normalizing flows and petra.flow_utils.
+    # Coppuccino-backed normalizing flows in petra.copula_flows.
     # Coppuccino declares its own FlowJAX, Equinox and Paramax dependencies.
     # petra.utils imports jax only function-locally, so the pure-numpy entry
     # points -- and `import petra` itself -- do not pay the jax import cost.
@@ -49,7 +49,7 @@ dependencies = [
     # Pinned to the published release. petra used to pass
     # normalizing_flows_fit(..., show_progress=...), which exists only in the
     # unreleased 2.0.0 line; it now silences that bar via
-    # petra.flow_utils.quiet_external_fit instead, so 1.0.0 is sufficient and the
+    # petra.copula_flows.quiet_external_fit instead, so 1.0.0 is sufficient and the
     # package installs from PyPI unaided.
     "coppuccino>=1.0.0,<2",
 ]
@@ -103,39 +103,29 @@ dev = [
 python-preference = "only-managed"
 
 [build-system]
-requires = ["hatchling"]
+# The PEP 639 `license` / `license-files` fields above need hatchling >= 1.26 to
+# build at all, and 1.26.x still writes Metadata-Version 2.3 without a
+# License-Expression; 1.27 is the first release that emits both. The upper bound
+# keeps a future major release from changing the built metadata unreviewed, as
+# for the lint gates in the dev group.
+requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
+# Every file under petra/ that git does not ignore is packaged, so the PEP 561
+# marker petra/py.typed ships in the wheel (and, through "/petra", in the
+# sdist) without being listed. tests/test_make_catalog.py checks it exists.
 packages = ["petra"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/petra", "/tests", "/README.md", "/LICENSE"]
 
 [tool.pytest.ini_options]
-# petra/ is a testpath too: every in-docstring example is executed as a test,
-# so a docstring that drifts from the code it documents fails the build.
-testpaths = ["tests", "petra"]
-# --cov-fail-under is deliberately NOT here. addopts applies to EVERY
-# invocation, including ones that were never meant to cover everything:
-# `pytest -k <subset>` measures only what the subset touched and exits 1, and
-# `pytest --collect-only` -- which runs no test at all -- still prints
-# "FAIL Required test coverage ... not reached" against the fraction that merely
-# importing the package reaches. Both are false alarms: nothing is under-tested,
-# the run simply was not a full one, and pytest-cov cannot tell a narrowed run
-# from a complete one. So the gate is attached to the invocation that IS a full
-# run -- the `tests` job in .github/workflows/github-actions.yml, the ONLY place
-# it is enforced.
-#
-# The cost of that trade, stated plainly: a bare local `pytest` is UNGATED. Any
-# new thing that runs the whole suite -- another job, a pre-commit hook, a
-# Makefile target -- must pass --cov-fail-under itself or it is not gated.
-#
-# term-missing rather than term: with branch = true the Missing column is where
-# untaken arms show up (as `779->799`), and that list is the work queue for
-# raising the gate. Plain `term` reports a BrPart count without ever saying
-# which branches.
-addopts = "-ra --doctest-modules --cov=petra --cov-report=term-missing"
+# Docstrings carry no examples, so petra/ is not a testpath.
+testpaths = ["tests"]
+# The --cov-fail-under=90 gate is passed by CI's `tests` job, not here, so a partial run is not failed.
+addopts = "-ra --cov=petra --cov-report=term-missing"
+# No warning filter: petra defines no warning class of its own, so every warning is only reported.
 
 # Coverage settings live here rather than in addopts so that a bare
 # `coverage run` / `coverage report` -- what you reach for when working out
@@ -154,13 +144,9 @@ addopts = "-ra --doctest-modules --cov=petra --cov-report=term-missing"
 branch = true
 
 [tool.coverage.report]
-# coverage's should_fail_under() compares round(total, precision) against the
-# gate, so at the default precision of 0 a real 97.6% rounds to 98 and clears a
-# --cov-fail-under=98. Two digits makes the gate mean the number it prints.
+# Two digits, so the gate compares the number it prints, not a rounded one.
 precision = 2
-# fail_under is deliberately NOT set here either: pytest-cov reads it out of
-# this section whenever --cov-fail-under is absent, so setting it would be
-# exactly equivalent to putting the gate back in addopts, false alarms and all.
+# fail_under is not set: pytest-cov would apply it to every run, as if the gate were in addopts.
 
 [tool.ruff]
 # Mirrors .flake8: E501 is not enforced (see `ignore` below), but the

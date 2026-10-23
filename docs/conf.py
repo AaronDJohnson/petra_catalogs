@@ -32,7 +32,7 @@ autodoc_default_options = {
     "undoc-members": True,
     "show-inheritance": True,
 }
-autodoc_typehints = "none"
+autodoc_typehints = "description"
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 napoleon_use_ivar = True

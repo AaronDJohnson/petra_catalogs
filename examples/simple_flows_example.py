@@ -13,7 +13,7 @@ Run with::
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from petra import CopulaFlowFit, Initialization, PosteriorChain
+from petra import PosteriorChain
 from petra import make_catalog_copula_flows
 
 
@@ -50,10 +50,11 @@ def main() -> None:
         num_iterations=1,
         rng_seed=42,
         threshold_samples=10,
-        initialization=Initialization(num_iterations=5),
-        flow_fit=CopulaFlowFit(
-            knots=4, flow_layers=1, max_epochs=3, max_patience=2,
-        ),
+        init_num_iterations=5,
+        knots=4,
+        flow_layers=1,
+        max_epochs=3,
+        max_patience=2,
         progress=False,
     )
 
