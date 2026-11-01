@@ -1,7 +1,7 @@
 """The optional GBGPU adapter on the CDL1 example, and the waveform-match refinement end to end.
 
-Every test that generates a waveform skips without gbgpu (the ``match`` extra); the argument checks and the install
-hint run everywhere.
+Every test that generates a waveform skips without gbgpu (the ``match`` extra), or when importing it crashes the
+interpreter (see ``importorskip_native``); the argument checks and the install hint run everywhere.
 """
 
 import inspect
@@ -14,7 +14,7 @@ import pytest
 from petra.gb_waveforms import GBGPU_COLUMNS, erebor_to_gbgpu, gbgpu_waveforms
 from petra.match import bank_matches, cluster_by_match, greedy_clusters, refine_catalog
 from petra.posterior_chain import PosteriorChain
-from tests.helpers import LISA_EXAMPLE
+from tests.helpers import LISA_EXAMPLE, importorskip_native
 
 #: The settings of the CDL1 run the example files come from: 9 months at dt = 2.5 s, TDI-2, gbgpu oversample 4.
 RUN = {"T": 23328000.0, "dt": 2.5, "tdi2": True, "oversample": 4}
@@ -25,7 +25,7 @@ EREBOR_RUN = {"orbits": SimpleNamespace(frame="icrs"), "t0": 97729089.327664}
 @pytest.fixture(scope="module")
 def run_waveforms():
     """The adapter at the CDL1 run's settings; skipped without gbgpu."""
-    pytest.importorskip("gbgpu")
+    importorskip_native("gbgpu")
     return gbgpu_waveforms(**RUN)
 
 
@@ -116,7 +116,7 @@ def test_other_column_layouts_give_the_same_bank(run_waveforms, cdl1_20p38):
 
 
 def test_erebor_to_gbgpu_inverts_the_sampler_basis(cdl1_20p38):
-    pytest.importorskip("gbgpu")
+    importorskip_native("gbgpu")
     rows = cdl1_20p38.chain[:, 0]
     np.testing.assert_allclose(erebor_to_gbgpu(to_erebor(rows)), rows, rtol=1e-12, atol=0)
     padded = np.full((200, 2, 9), np.nan)
@@ -129,7 +129,7 @@ def test_erebor_to_gbgpu_inverts_the_sampler_basis(cdl1_20p38):
 
 
 def test_erebor_to_gbgpu_is_erebors_own_transform(cdl1_20p38):
-    transforms = pytest.importorskip("lisatools.globalfit.stock.erebor.transforms")
+    transforms = importorskip_native("lisatools.globalfit.stock.erebor.transforms")
     erebor = to_erebor(cdl1_20p38.chain[:, 0])
     expected = transforms.make_gb_transform_container(
         use_chirp_mass=True, use_fdot_astro=True, use_distance=True).both_transforms(erebor.copy())

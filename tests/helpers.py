@@ -4,10 +4,15 @@ The chain builders keep the bodies of the old suite's helpers; the ``ref_*`` bui
 behaviour reference the restructure was checked against, so a ref-pinned test must build its chain with them.
 """
 
+import functools
 import hashlib
 import json
 import os
+import signal
+import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pyarrow.feather as feather
@@ -35,6 +40,23 @@ def budget_message(num_iterations: int) -> str:
             f"so the search did not finish, and the labeling returned is the best found so far. Each split "
             f"proposal can take up to 10 iterations. Pass a larger num_iterations to finish the search -- a run "
             f"with a checkpoint_dir can be resumed with one -- or split_moves=False for the plain search.")
+
+
+def importorskip_native(name: str) -> ModuleType:
+    """Return ``pytest.importorskip(name)``, skipping as well when importing `name` kills the interpreter.
+
+    The PyPI wheels of LISAanalysistools, which gbgpu imports, can be built for a newer CPU than the machine's; the
+    import then dies with SIGILL, which no ``except`` can catch, so the import is tried in a fresh interpreter first.
+    """
+    returncode = _import_returncode(name)
+    if returncode < 0:
+        pytest.skip(f"importing {name} kills the interpreter with {signal.Signals(-returncode).name}")
+    return pytest.importorskip(name)
+
+
+@functools.cache
+def _import_returncode(name: str) -> int:
+    return subprocess.run([sys.executable, "-c", f"import {name}"], capture_output=True).returncode
 
 
 # Checkpointing
