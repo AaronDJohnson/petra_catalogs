@@ -1,4 +1,4 @@
-"""Shared fixtures: scripted relabeling costs, the two-cluster checkpoint chain and the thinned LISA example.
+"""Shared fixtures: scripted relabeling costs, the two-cluster checkpoint chain, the thinned LISA example and CDL1.
 
 matplotlib is optional and no test needs it; when it is installed, the non-interactive Agg backend is selected
 before anything can create a figure.
@@ -50,3 +50,12 @@ def lisa_sub():
         pytest.skip(f"the LISA example {LISA_EXAMPLE} is missing")
     full = PosteriorChain.read_feather(str(LISA_EXAMPLE))
     return PosteriorChain(full.chain[::10], full.num_sources, full.num_params_per_source)
+
+
+@pytest.fixture(scope="session")
+def cdl1_20p38():
+    """The 20.38 mHz galactic binary of the CDL1 9-month global fit, 200 x 1 x 9; skipped when the file is missing."""
+    path = LISA_EXAMPLE.parent / "cdl1_9mo_gb_20p38mHz.feather"
+    if not path.is_file():
+        pytest.skip(f"the CDL1 example {path} is missing")
+    return PosteriorChain.read_feather(str(path))

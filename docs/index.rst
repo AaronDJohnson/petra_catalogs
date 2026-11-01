@@ -11,6 +11,10 @@ training is configured with the keywords ``knots``, ``flow_layers``,
 the optional Gaussian initialization with ``init_with_mv_normal`` and
 ``init_num_iterations``.
 
+After a run, :func:`petra.match.refine_catalog` splits and merges labels by the
+waveform match of Littenberg et al. (2020), with galactic-binary waveforms from
+the optional GBGPU adapter :mod:`petra.gb_waveforms`.
+
 .. toctree::
    :maxdepth: 2
 

@@ -59,6 +59,12 @@ dependencies = [
 # all import and run without it. Use `uv sync --extra plots`, or
 # `pip install petra-catalogs[plots]`, to run the plotting examples.
 plots = ["matplotlib>=3.10.0,<4"]
+# petra.gb_waveforms only. Neither package ships cp314 wheels or an sdist, hence the markers; the LISAanalysistools
+# dev-branch stack (GBGPU@dev) is installed by hand following its README.
+match = [
+    "gbgpu>=1.2.4,<2; python_version < '3.14'",
+    "lisaanalysistools>=1.2.8,<2; python_version < '3.14'",
+]
 
 [project.urls]
 Homepage = "https://github.com/AaronDJohnson/petra_catalogs"
