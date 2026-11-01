@@ -25,6 +25,15 @@ Chains and sample loading
 .. automodule:: petra.samples_io
    :members:
 
+Waveform-match refinement
+-------------------------
+
+.. automodule:: petra.match
+   :members:
+
+.. automodule:: petra.gb_waveforms
+   :members:
+
 Relabeling internals
 --------------------
 

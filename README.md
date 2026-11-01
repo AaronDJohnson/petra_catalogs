@@ -182,9 +182,126 @@ catalog = petra.make_catalog_copula_flows(
 `init_with_mv_normal=False` skips multivariate initialization. These switches
 are independent.
 
+## Waveform-match refinement (optional)
+
+`petra.match.refine_catalog` runs after a petra run. It compares the rows of
+each label by the match of Littenberg et al. (2020): the noise-weighted overlap
+of two samples' TDI waveforms, not maximized over phase or time. It splits a
+label whose rows form clusters that do not match each other (two sources), and
+merges labels that never share a sample and whose waveforms match (two modes of
+one source). The threshold is 0.5 by default, as in the 2020 paper; the 2023
+paper uses 0.8. The returned catalog has an empty `cost_dict`. The waveforms
+come from GBGPU through `petra.gb_waveforms`, which petra does not depend on:
+`pip install "petra-catalogs[match]"` installs the PyPI `gbgpu` and
+`lisaanalysistools` (Python 3.11-3.13). The group's development stack, the
+LISAanalysistools `dev` branch with GBGPU `dev`, is installed by hand following
+its README; the adapter calls the same `run_wave` and uses GBGPU's
+`flip_ref_phase` when it has one.
+
+```python
+import numpy as np
+import petra
+from petra.gb_waveforms import gbgpu_waveforms
+from petra.match import bank_matches, refine_catalog
+
+rows = petra.PosteriorChain.read_feather("example_notebooks/data/cdl1_9mo_gb_20p38mHz.feather").chain[:, 0]
+waveforms = gbgpu_waveforms(T=23328000.0, dt=2.5, tdi2=True, oversample=4)
+# Dev stack with the run's own orbits: gbgpu_waveforms(..., gbgpu_options={"orbits": run_orbits})
+matches = bank_matches(waveforms(rows), np.arange(len(rows)))
+print(np.median(matches[np.triu_indices(len(rows), 1)]))  # 0.987
+flipped = rows[:1] + [0, 0, 0, 0, np.pi, 0, np.pi / 2, 0, 0]  # phi0 + pi, psi + pi/2
+print(bank_matches(waveforms(np.vstack([rows[:1], flipped])), np.array([0]), np.array([1])))  # [[1.]]
+
+# A catalog whose two labels hold the two psi/phi0 modes of this one source.
+high = rows[:, 6] > np.pi / 2
+chain = np.full((len(rows), 2, 9), np.nan)
+chain[~high, 0], chain[high, 1] = rows[~high], rows[high]
+result = refine_catalog(petra.PosteriorChain(chain, 2, 9, trans_dimensional=True), waveforms, threshold=0.8)
+print(result.actions)                # one merge of label 1 into label 0
+print(result.catalog.prob_in_model)  # [1. 0.]
+```
+
+`cdl1_9mo_gb_20p38mHz.feather` and `cdl1_9mo_gb_15p63mHz.feather` each hold
+one galactic binary from an erebor global-fit run on the 9-month CDL1 data: the
+last 50 stored iterations of 4 cold-chain walkers, converted from erebor's
+sampler parameters to GBGPU's by `examples/erebor_gb_window.py`. The run used
+`T = 23328000 s`, `dt = 2.5 s`, TDI-2 and the Mojito L1 orbits in the ICRS
+frame from `t0 = 97729089.327664 s`, and `T`, `dt`, `tdi2`, the orbits and
+their frame must always be those of the run that produced the chain. erebor
+samples the sky in ICRS, so these files' `lam` and `beta` hold the right
+ascension and declination: the PyPI GBGPU's analytic equal-arm orbits are
+ecliptic and start at another point of the orbit, so its matches for these
+files are approximate (the sources sit at the wrong sky position). For exact
+matches use the dev stack with the run's orbits and start through
+`gbgpu_options`; `convention="erebor"` refuses to run without them. The
+columns are read by `convention`, or by `columns={name: index}` for any other
+layout:
+
+| `convention` | Columns | phi0 |
+| --- | --- | --- |
+| `"gbgpu"` (default) | `amplitude, f0 [Hz], fdot [Hz/s], fddot, phi0, iota, psi, lam, beta`, angles in radians | GBGPU's, e^{+i phi0} |
+| `"gbmcmc"` | `f0, fdot, amplitude, lam, sin_beta, cos_iota, psi, phi0`, fddot = 0 | LDC, e^{-i phi0} |
+| `"erebor"` | erebor's sampler basis `distance [kpc], f0 [mHz], chirp_mass [Msun], phi0, cos_iota, psi, alpha, sin_delta, fdot_astro_ratio` (ICRS sky), converted by `erebor_to_gbgpu` exactly as erebor converts it; needs `gbgpu_options={"orbits": <ICRS orbits>, "t0": <start>}` | sampled value, which is GBGPU's e^{+i phi0} (erebor's LDC phi0 negated) |
+
+`batch_size=n` makes the waveforms `n` rows at a time on one bin count, so a
+bank of hundreds of thousands of rows is the one a single call would give
+without GBGPU's working memory for all of them at once.
+
+`refine_catalog` splits a cluster into a label absent from all its samples, so
+it needs empty labels to split into: widen the catalog with `expand_chain`, or
+pass `grow=True` to append a label whenever a split has nowhere to go.
+
+`petra.match.cluster_by_match` catalogs the rows by the match alone, with no
+petra run: the reference-sample rule of `greedy_clusters`, taking at most one
+row per sample into a cluster. It never forms the rows-by-rows match matrix,
+so it runs on a crowded frequency band. Given a petra catalog it ignores the
+labels, so one bank can serve both methods:
+
+```python
+from lisatools.detector import L1Orbits  # the dev stack
+from petra.match import cluster_by_match, present_rows
+
+orbits = L1Orbits(l1_file, force_backend="cpu", frame="icrs")  # the Mojito L1 file the run read
+orbits.configure(linear_interp_setup=True)
+waveforms = gbgpu_waveforms(T=23328000.0, dt=2.5, convention="erebor", tdi2=True, oversample=16, batch_size=2000,
+                            gbgpu_options={"orbits": orbits, "t0": 97729089.327664})
+catalog = petra.make_catalog_mv_normal(chain, chain.num_sources + 5, initialization_param_index=1)
+samples, slots = present_rows(catalog.chain)
+bank = waveforms(catalog.chain[samples, slots])
+refined = refine_catalog(catalog, lambda rows: bank, grow=True).catalog
+match_only = cluster_by_match(catalog, lambda rows: bank)
+```
+
 ## Unreleased
 
 These notes compare the development tree with 1.1.
+
+### Added
+
+- Waveform-match refinement after a petra run: the module `petra.match`
+  (`refine_catalog`, `bank_matches`, `greedy_clusters`) splits labels that hold
+  two sources and merges labels that are two modes of one source, and the
+  module `petra.gb_waveforms` supplies galactic-binary waveforms from GBGPU
+  through the new optional extra `match`. Two example files,
+  `example_notebooks/data/cdl1_9mo_gb_20p38mHz.feather` and
+  `cdl1_9mo_gb_15p63mHz.feather`, each hold one galactic binary of the CDL1
+  9-month global fit. See
+  [Waveform-match refinement (optional)](#waveform-match-refinement-optional).
+- `petra.match.cluster_by_match`, waveform-match clustering without a petra
+  run, one row per sample in a cluster and without the rows-by-rows matrix;
+  `refine_catalog(grow=True)`, which appends a label for a split with nowhere
+  to go; and in `petra.gb_waveforms`, `convention="erebor"` with
+  `erebor_to_gbgpu` (moved from `examples/erebor_gb_window.py`, now erebor's
+  exact conversion through GBGPU's `get_amplitude` and `get_fdot`; it requires
+  the run's ICRS orbits and `t0`) and `batch_size`.
+
+### Security
+
+- The lock no longer resolves versions with open advisories: Pillow 13.0.0
+  (through matplotlib), urllib3 2.8.0 and certifi 2026.10.19 (through
+  requests), tornado 6.5.9 and nbconvert 7.17.2 (the dev group). None is a
+  dependency of petra itself; `[tool.uv] constraint-dependencies` keeps the
+  floors in every future lock without adding them to the published metadata.
 
 ### Removed
 
@@ -419,7 +536,7 @@ not to users of 1.0.0.
 ## Development
 
 ```console
-uv sync --locked --extra plots
+uv sync --locked --extra plots --extra match
 uv run pytest --cov-fail-under=90
 uv run mypy
 uv run flake8 --select=F,E9 petra/ tests/ examples/

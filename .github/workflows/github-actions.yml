@@ -59,7 +59,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --locked --extra plots --python ${{ matrix.python-version }}
+      - run: uv sync --locked --extra plots --extra match --python ${{ matrix.python-version }}
       - name: Package import
         run: |
           uv run python - <<'PY'
