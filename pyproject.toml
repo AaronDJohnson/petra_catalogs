@@ -4,8 +4,8 @@ version = "1.1.0"
 description = "From LISA global fit to catalogs"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Aaron D. Johnson", email = "aaron9035@gmail.com" },
     { name = "Javier Roulete" },
@@ -101,6 +101,16 @@ dev = [
 # a broken `_sqlite3` extension, so `pytest` cannot even start under it. Managed
 # interpreters are downloaded on demand and pinned by .python-version.
 python-preference = "only-managed"
+# Security floors for transitive dependencies, applied to the lock only (not to the published metadata): each is the
+# first release that fixes the open advisories against it. Pillow comes in through matplotlib, urllib3 and certifi
+# through requests, tornado and nbconvert through the dev group. Raise a floor when a new advisory lands.
+constraint-dependencies = [
+    "pillow>=13.0.0",
+    "urllib3>=2.8.0",
+    "tornado>=6.6",
+    "nbconvert>=7.17.2",
+    "certifi>=2026.10.19",
+]
 
 [build-system]
 # The PEP 639 `license` / `license-files` fields above need hatchling >= 1.26 to
@@ -118,7 +128,7 @@ build-backend = "hatchling.build"
 packages = ["petra"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/petra", "/tests", "/README.md", "/LICENSE"]
+include = ["/petra", "/tests", "/README.md", "/LICENSE", "/NOTICE"]
 
 [tool.pytest.ini_options]
 # Docstrings carry no examples, so petra/ is not a testpath.
