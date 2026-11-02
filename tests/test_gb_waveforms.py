@@ -25,7 +25,7 @@ EREBOR_RUN = {"orbits": SimpleNamespace(frame="icrs"), "t0": 97729089.327664}
 @pytest.fixture(scope="module")
 def run_waveforms():
     """The adapter at the CDL1 run's settings; skipped without gbgpu."""
-    importorskip_native("gbgpu")
+    importorskip_native("gbgpu.gbgpu")
     return gbgpu_waveforms(**RUN)
 
 
@@ -116,7 +116,7 @@ def test_other_column_layouts_give_the_same_bank(run_waveforms, cdl1_20p38):
 
 
 def test_erebor_to_gbgpu_inverts_the_sampler_basis(cdl1_20p38):
-    importorskip_native("gbgpu")
+    importorskip_native("gbgpu.gbgpu")
     rows = cdl1_20p38.chain[:, 0]
     np.testing.assert_allclose(erebor_to_gbgpu(to_erebor(rows)), rows, rtol=1e-12, atol=0)
     padded = np.full((200, 2, 9), np.nan)

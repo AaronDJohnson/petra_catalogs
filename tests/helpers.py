@@ -45,7 +45,7 @@ def budget_message(num_iterations: int) -> str:
 def importorskip_native(name: str) -> ModuleType:
     """Return ``pytest.importorskip(name)``, skipping as well when importing `name` kills the interpreter.
 
-    The PyPI wheels of LISAanalysistools, which gbgpu imports, can be built for a newer CPU than the machine's; the
+    The PyPI wheels of LISAanalysistools, which gbgpu.gbgpu imports, can be built for a newer CPU than the machine's; the
     import then dies with SIGILL, which no ``except`` can catch, so the import is tried in a fresh interpreter first.
     """
     returncode = _import_returncode(name)
