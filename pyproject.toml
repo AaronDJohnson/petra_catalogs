@@ -46,12 +46,10 @@ dependencies = [
     # petra.utils imports jax only function-locally, so the pure-numpy entry
     # points -- and `import petra` itself -- do not pay the jax import cost.
     "jax>=0.7.2,<0.8",
-    # Pinned to the published release. petra used to pass
-    # normalizing_flows_fit(..., show_progress=...), which exists only in the
-    # unreleased 2.0.0 line; it now silences that bar via
-    # petra.copula_flows.quiet_external_fit instead, so 1.0.0 is sufficient and the
-    # package installs from PyPI unaided.
-    "coppuccino>=1.0.0,<2",
+    # 2.0.0 is the first release with normalizing_flows_fit(..., show_progress=...),
+    # which petra.copula_flows uses to silence the fitter's progress bar. The
+    # ceiling is the next major version, which may change the API again.
+    "coppuccino>=2.0.0,<3",
 ]
 
 [project.optional-dependencies]

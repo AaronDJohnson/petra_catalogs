@@ -641,24 +641,24 @@ wheels = [
 
 [[package]]
 name = "coppuccino"
-version = "1.0.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "equinox" },
     { name = "flowjax" },
-    { name = "interpax" },
     { name = "jax" },
     { name = "jaxlib" },
     { name = "jaxtyping" },
     { name = "numpy" },
+    { name = "optax" },
     { name = "paramax" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/2b/2d329c299126ec6a9aa361ec487ba0d0e87ceea9228d2e7f9179ff31fa76/coppuccino-1.0.0.tar.gz", hash = "sha256:f8a4c3be91431c32b0b10dab36e29236c46cc83971e3b4e84529724dfe12a519", size = 2787679, upload-time = "2026-06-16T22:56:36.398Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/20/e971de29f3b27fcaa35db6dc7feeaf5c838e0e5703fcca8d25b6fb6ba234/coppuccino-2.0.0.tar.gz", hash = "sha256:623a11af997f67c8524e94f79b3e65467e38b3b2d08bf00b36a387140d8f7162", size = 798901, upload-time = "2026-11-01T13:09:31.206Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/2a/758d82546ce5d65789c1c86581b3f3747f2d93d945c8132b7be04c8a9096/coppuccino-1.0.0-py3-none-any.whl", hash = "sha256:194ef7b69fe7767fc9a63faee4ddeb2d0be0b8c4a6d7292b719fe12b9eb6c199", size = 26704, upload-time = "2026-06-16T22:56:35.252Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/a6/e19c9116c2abefcb609042c9e0cd1f47b5c7d2d17480bb423933e42ea691/coppuccino-2.0.0-py3-none-any.whl", hash = "sha256:5be33ed6891741b4305c0900938e5b9ab6f42cf9849df81aa5ef614ec88d7280", size = 85403, upload-time = "2026-11-01T13:09:29.374Z" },
 ]
 
 [[package]]
@@ -1101,22 +1101,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
-]
-
-[[package]]
-name = "interpax"
-version = "0.3.14"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "equinox" },
-    { name = "jax" },
-    { name = "jaxtyping" },
-    { name = "lineax" },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/38/b2/06d071b6eade1ea7e3bb0660aa3c1f8fd6484fa611cc45cd424d2bbebecf/interpax-0.3.14.tar.gz", hash = "sha256:5018c18a07d946be7466504f385b4e5ac632cd7b006c1cead42b1aefe37e16e3", size = 58669, upload-time = "2026-04-18T00:35:09.305Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/77/3b4c3db18738ffc146887f3b47e44159d370509c3ee302f0456a8f0dfcac/interpax-0.3.14-py3-none-any.whl", hash = "sha256:070c5242227fa65bd7dafc472ae2ed0c4df9891fbbbede73a8b04e21859a5d47", size = 28104, upload-time = "2026-04-18T00:35:07.774Z" },
 ]
 
 [[package]]
@@ -1575,21 +1559,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6c/f0/89eb11dffbe9279ff37144dec786927314502ae0b114f1449dc78c458aab/librt-0.15.0-cp315-cp315t-win32.whl", hash = "sha256:c16d15ee371643ab48dc8248a3e680ebbeca573a13af2c3dd0c985b142d77162", size = 104313, upload-time = "2026-08-07T10:49:12.305Z" },
     { url = "https://files.pythonhosted.org/packages/6d/4a/1f1978c200f563beda63c36adff2d65bbecb81e365e8e69e572f5f70fbc6/librt-0.15.0-cp315-cp315t-win_amd64.whl", hash = "sha256:dbd605739f228912dc49027cb764456b9757750bdc2b6b7773164db7096c6fd1", size = 126889, upload-time = "2026-08-07T10:49:13.881Z" },
     { url = "https://files.pythonhosted.org/packages/38/a6/800800bfed7b1fb10fc3f3d557785c3854e80d3f7a9800d784b176a1fc2d/librt-0.15.0-cp315-cp315t-win_arm64.whl", hash = "sha256:84d244b00604d17df3fc7736c327892d6bba66181254aa4087be807b6c342bdc", size = 110700, upload-time = "2026-08-07T10:49:15.499Z" },
-]
-
-[[package]]
-name = "lineax"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "equinox" },
-    { name = "jax" },
-    { name = "jaxtyping" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/35/d6/4e28416a6fe58dd6bc7565b1ffa330f4d0ba7d74212642b1b734c511299e/lineax-0.1.0.tar.gz", hash = "sha256:5f1a8f060142af2cdbf7d66b99e8d3071c3aa734b677df6339df4b4c4c0554d2", size = 50209, upload-time = "2026-01-27T21:17:26.652Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/0c/2ed47112fc1958a0a81c9b015d4e1861953a1ec3a17b081c0180a25ce82c/lineax-0.1.0-py3-none-any.whl", hash = "sha256:f00911c6b07d427c4835db46856970c8348bc82a035b51f4386ad09382af957a", size = 74600, upload-time = "2026-01-27T21:17:25.33Z" },
 ]
 
 [[package]]
@@ -2413,7 +2382,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "coppuccino", specifier = ">=1.0.0,<2" },
+    { name = "coppuccino", specifier = ">=2.0.0,<3" },
     { name = "gbgpu", marker = "python_full_version < '3.14' and extra == 'match'", specifier = ">=1.2.4,<2" },
     { name = "jax", specifier = ">=0.7.2,<0.8" },
     { name = "lisaanalysistools", marker = "python_full_version < '3.14' and extra == 'match'", specifier = ">=1.2.8,<2" },

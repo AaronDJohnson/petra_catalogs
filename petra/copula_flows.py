@@ -1,17 +1,15 @@
 """Copula-flow relabeling: each slot is fit with a Gaussian-copula marginal transform plus a normalizing flow.
 
-The flows come from ``coppuccino.copula_flows.normalizing_flows_fit``. Importing this module imports jax but leaves its
-64-bit mode alone; set ``JAX_ENABLE_X64=1`` before any JAX array exists if the fits need double precision.
+The flows come from ``coppuccino.copula_flows.normalizing_flows_fit``. Importing this module imports coppuccino, which
+turns on JAX's 64-bit mode for the whole process.
 """
 
-import contextlib
 import logging
 import math
-import os
 import warnings
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Iterator, List, Optional, Sequence
+from typing import Any, Callable, List, Optional, Sequence
 
 import jax.numpy as jnp
 import jax.random as jr
@@ -31,23 +29,6 @@ logger = logging.getLogger(__name__)
 # Low enough that the assignment refuses the pairing, high enough not to swamp the finite costs as -1e10 did.
 DEFAULT_LOG_PROB_FLOOR = -50.0
 DEFAULT_MAX_PATIENCE = 20
-
-
-@contextlib.contextmanager
-def quiet_external_fit(quiet: bool) -> Iterator[None]:
-    """Discard stderr inside the block, silencing a progress bar the fitter offers no switch for.
-
-    Parameters:
-        quiet: discard stderr, warnings included, when True; do nothing when False.
-
-    Yields:
-        None.
-    """
-    if not quiet:
-        yield
-        return
-    with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
-        yield
 
 
 def safe_flow_log_prob(flow: Optional[Any], x: npt.ArrayLike,
@@ -215,12 +196,10 @@ def make_copula_flows_fit(chain: np.ndarray,
 
             else:
                 logger.debug("Fitting a copula flow for source %d on %d samples.", i, chain_entry.shape[0])
-                # normalizing_flows_fit has no progress switch, so progress=False silences its bar instead.
-                with quiet_external_fit(not progress):
-                    fitted_distributions[i] = normalizing_flows_fit(chain_entry, rng_seed=int(fit_seeds[i]),
-                                                                    knots=knots, patience=max_patience,
-                                                                    learning_rate=learning_rate,
-                                                                    max_epochs=max_epochs, flow_layers=flow_layers)
+                fitted_distributions[i] = normalizing_flows_fit(chain_entry, rng_seed=int(fit_seeds[i]),
+                                                                knots=knots, patience=max_patience,
+                                                                learning_rate=learning_rate, max_epochs=max_epochs,
+                                                                flow_layers=flow_layers, show_progress=progress)
         return fitted_distributions
 
     return copula_flows_fit
