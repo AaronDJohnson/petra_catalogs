@@ -13,6 +13,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterator, List, Optional, Sequence
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
@@ -31,6 +32,16 @@ logger = logging.getLogger(__name__)
 # Low enough that the assignment refuses the pairing, high enough not to swamp the finite costs as -1e10 did.
 DEFAULT_LOG_PROB_FLOOR = -50.0
 DEFAULT_MAX_PATIENCE = 20
+
+
+@eqx.filter_jit
+def _jitted_log_prob(flow: Any, x: Array) -> Array:
+    """``flow.log_prob(x)`` compiled once per flow and input shape.
+
+    Evaluated eagerly, a coppuccino flow dispatches every operation of its marginal splines and coupling layers
+    separately, which costs seconds per call; the relabeling loop calls each flow once per posterior sample.
+    """
+    return flow.log_prob(x)
 
 
 @contextlib.contextmanager
@@ -78,7 +89,7 @@ def safe_flow_log_prob(flow: Optional[Any], x: npt.ArrayLike,
     else:
         # Only jax_debug_nans' FloatingPointError: any other exception is a mis-wired flow and must surface.
         try:
-            log_prob = jnp.asarray(flow.log_prob(x))
+            log_prob = jnp.asarray(_jitted_log_prob(flow, x) if isinstance(flow, eqx.Module) else flow.log_prob(x))
         except FloatingPointError:
             return jnp.full(out_shape, floor)
 
