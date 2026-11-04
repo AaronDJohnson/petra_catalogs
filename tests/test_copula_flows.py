@@ -89,6 +89,28 @@ def test_safe_flow_log_prob_floors_what_a_flow_cannot_score(call, expected):
     check(call, expected)
 
 
+def test_safe_flow_log_prob_compiles_equinox_flows_once_per_shape():
+    """An equinox flow is evaluated through filter_jit: same values, one trace per input shape, failures still floored."""
+    import equinox as eqx
+
+    traces = []
+
+    class _ModuleFlow(eqx.Module):
+        scale: float = 2.0
+
+        def log_prob(self, x):
+            traces.append(x.shape)
+            return -jnp.sum(x ** 2, axis=-1) / self.scale
+
+    flow = _ModuleFlow()
+    x = np.array([[1.0, 1.0], [0.0, 2.0], [np.nan, 0.0]])
+    for _ in range(3):
+        np.testing.assert_allclose(safe_flow_log_prob(flow, x), [-1.0, -2.0, FLOOR])
+    assert traces == [(3, 2)]
+    np.testing.assert_allclose(safe_flow_log_prob(flow, x[:1]), [-1.0])
+    assert traces == [(3, 2), (1, 2)]
+
+
 @pytest.mark.parametrize("sample, flows, prob_in_model, expected", [
     pytest.param(np.array([[0.5], [np.nan]]), [UniformPrior([0.0], [np.exp(3.0)]), UNIT], np.array([0.9, 0.1]),
                  [[-3.1053605156578263, -2.302585092994046], [-2.3025850929940455, -0.10536051565782631]],
